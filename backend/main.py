@@ -2343,6 +2343,11 @@ class GitHubPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class NotionPreviewRequest(BaseModel):
+    token: Optional[str] = Field(None, max_length=500)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2439,6 +2444,13 @@ def extension_github_preview(request: GitHubPreviewRequest):
     """Preview the read-only GitHub connector without ingesting data."""
     from backend.extensions.runtime import github_preview
     return github_preview(request.repo, limit=request.limit, token=request.token)
+
+
+@app.post("/extensions/connectors/notion/preview")
+def extension_notion_preview(request: NotionPreviewRequest):
+    """Preview the read-only Notion connector without ingesting data."""
+    from backend.extensions.runtime import notion_preview
+    return notion_preview(limit=request.limit, token=request.token)
 
 
 @app.post("/extensions/intelligence/keyword-risk/preview")

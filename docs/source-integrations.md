@@ -37,6 +37,17 @@ Use `SUDOBRAIN_GITHUB_TOKEN` or the request `token` field for private repos,
 discussion GraphQL access, or higher rate limits. Token values are never
 returned from preview health output.
 
+Preview Notion without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/notion/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"limit":10}'
+```
+
+Use `SUDOBRAIN_NOTION_TOKEN` or the request `token` field. The connector uses
+Notion search to normalize pages and databases into source documents.
+
 ## Source Families
 
 ### Engineering

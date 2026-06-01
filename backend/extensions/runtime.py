@@ -6,6 +6,7 @@ from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.connectors.catalog import list_source_connectors
 from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
+from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.plugins.registry import BUILTIN_PLUGINS, discover_plugins
 from backend.sdk import SourceDocument
@@ -17,7 +18,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github"],
+            "connectors": ["local_markdown", "github", "notion"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -50,6 +51,15 @@ def github_preview(repo: str, limit: int = 25, token: str | None = None) -> dict
     documents = []
     if health.get("ok"):
         documents = preview_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def notion_preview(limit: int = 25, token: str | None = None) -> dict:
+    connector = NotionConnector(token=token)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_notion_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

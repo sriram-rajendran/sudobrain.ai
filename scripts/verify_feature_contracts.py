@@ -68,6 +68,7 @@ def main() -> None:
         '@app.get("/observability/status")',
         '@app.get("/plugins")',
         '@app.post("/extensions/connectors/github/preview")',
+        '@app.post("/extensions/connectors/notion/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -155,6 +156,13 @@ def main() -> None:
         "pull_request_review",
         "ci_failure",
         "discussion",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/notion.py", [
+        "class NotionConnector",
+        "SUDOBRAIN_NOTION_TOKEN",
+        "/search",
+        "_plain_property_summary",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

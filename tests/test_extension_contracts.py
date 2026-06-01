@@ -5,6 +5,7 @@ from backend.ai.providers import configured_providers
 from backend.connectors.catalog import connector_keys, list_source_connectors
 from backend.connectors.github import GitHubConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
+from backend.connectors.notion import NotionConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.sdk import SourceDocument
@@ -65,6 +66,7 @@ class ExtensionContractTests(unittest.TestCase):
         catalog = extensions["runtime"]["source_catalog"]
         self.assertIn("github", {item["key"] for item in catalog})
         self.assertIn("github", extensions["runtime"]["connectors"])
+        self.assertIn("notion", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -163,6 +165,53 @@ class ExtensionContractTests(unittest.TestCase):
         health = connector.health()
         self.assertTrue(health["token_configured"])
         self.assertNotIn("secret", str(health))
+
+    def test_notion_connector_normalizes_search_results(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, timeout=30):
+                return FakeResponse({"bot": {"workspace_name": "Demo"}})
+
+            def post(self, url, headers=None, json=None, timeout=30):
+                return FakeResponse({
+                    "results": [
+                        {
+                            "object": "page",
+                            "id": "page-1",
+                            "url": "https://example.invalid/notion/page-1",
+                            "created_time": "2026-01-01T00:00:00Z",
+                            "last_edited_time": "2026-01-02T00:00:00Z",
+                            "created_by": {"id": "u1"},
+                            "last_edited_by": {"id": "u2"},
+                            "properties": {
+                                "Name": {
+                                    "type": "title",
+                                    "title": [{"plain_text": "Launch plan"}],
+                                },
+                                "Status": {
+                                    "type": "select",
+                                    "select": {"name": "Ready"},
+                                },
+                            },
+                        }
+                    ]
+                })
+
+        connector = NotionConnector(token="secret", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Launch plan")
+        self.assertIn("Status: Ready", docs[0].text)
+        self.assertNotIn("secret", str(connector.health()))
 
 
 if __name__ == "__main__":
