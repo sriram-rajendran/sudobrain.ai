@@ -19,12 +19,12 @@ decisions, promises, and project risk.
 - Source citation metadata for chat search results: shipped for local search and chat cards.
 - JSON and Markdown knowledge export: shipped via `/knowledge/export`.
 - Source audit endpoint: existing.
-- Provenance APIs for decisions, promises, people, and graph edges: started.
-- Confidence scoring for stored knowledge: started through provenance responses.
-- Portable graph export: started via `/graph/export`.
-- Retention policy controls: started via `/privacy/retention`.
+- Provenance APIs for decisions, promises, people, and graph edges: shipped via `/knowledge/provenance`, `/graph/edge/explain`, and `/knowledge/trust-report`.
+- Confidence scoring for stored knowledge: shipped through provenance responses and the trust report.
+- Portable graph export: shipped via `/graph/export`.
+- Retention policy controls: shipped via `/privacy/retention`, `/privacy/retention/preview`, and the Settings view.
 - Per-source privacy controls: shipped via `/privacy/sources`.
-- Source freshness dashboard: backend started via `/sources/freshness`.
+- Source freshness dashboard: shipped via `/sources/freshness`, `/knowledge/trust-report`, and the Source Sync view.
 - Review queue filters by source, type, confidence, project, and age: shipped in `/review/queue`.
 - Reversible extraction review actions: shipped via `/review/actions` and undo endpoints.
 - Approval bundles for extracted knowledge: shipped via `/review/bundle` and the macOS Review Queue.

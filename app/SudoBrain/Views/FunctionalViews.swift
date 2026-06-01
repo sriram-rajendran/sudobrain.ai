@@ -181,6 +181,7 @@ struct DocumentsView: View {
 struct SourceSyncView: View {
     @State private var status: [String: Any] = [:]
     @State private var audit: [String: Any] = [:]
+    @State private var trustReport: [String: Any] = [:]
     @State private var freshness: [[String: Any]] = []
     @State private var isRunning = false
     @State private var message = ""
@@ -204,6 +205,7 @@ struct SourceSyncView: View {
                     if !message.isEmpty { Text(message).font(.caption).foregroundColor(.secondary) }
                     KeyValueCard(title: "Status", values: status)
                     KeyValueCard(title: "Audit", values: audit)
+                    KeyValueCard(title: "Trust Report", values: trustReport)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Source Freshness")
                             .font(.system(size: 13, weight: .semibold))
@@ -221,6 +223,7 @@ struct SourceSyncView: View {
     private func load() async {
         status = (try? await APIClient.shared.getRawObject("/sync/status")) ?? [:]
         audit = (try? await APIClient.shared.getRawObject("/sync/audit")) ?? [:]
+        trustReport = (try? await APIClient.shared.getRawObject("/knowledge/trust-report")) ?? [:]
         let fresh = (try? await APIClient.shared.getRawObject("/sources/freshness")) ?? [:]
         freshness = fresh["sources"] as? [[String: Any]] ?? []
     }

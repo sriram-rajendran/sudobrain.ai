@@ -4375,6 +4375,67 @@ def explain_graph_edge(source: str, target: str, relation: str = ""):
     }
 
 
+@app.get("/knowledge/trust-report")
+def knowledge_trust_report(limit: int = Query(default=200, ge=1, le=1000)):
+    """Summarize provenance, confidence, freshness, portability, and retention coverage."""
+    conn = db.get_connection()
+    try:
+        provenance = {}
+        for kind, table in [
+            ("decisions", "decisions"),
+            ("promises", "promises"),
+            ("tasks", "action_items"),
+            ("people", "people"),
+        ]:
+            try:
+                rows = conn.execute(f"SELECT * FROM {table} LIMIT ?", (limit,)).fetchall()
+            except Exception:
+                provenance[kind] = {"total": 0, "with_source": 0, "average_confidence": 0, "signals": []}
+                continue
+            confidences = []
+            signals = set()
+            with_source = 0
+            for row in rows:
+                item = dict(row)
+                if item.get("transcript_id") or item.get("recording_id") or item.get("email"):
+                    with_source += 1
+                confidence = _confidence_for_row(table, item)
+                confidences.append(float(confidence.get("score", 0)))
+                signals.update(confidence.get("signals", []))
+            total = len(rows)
+            provenance[kind] = {
+                "total": total,
+                "with_source": with_source,
+                "source_coverage": round(with_source / total, 3) if total else 0,
+                "average_confidence": round(sum(confidences) / len(confidences), 3) if confidences else 0,
+                "signals": sorted(signals),
+            }
+    finally:
+        conn.close()
+
+    graph = graph_export()
+    freshness = source_freshness()
+    retention = retention_policy()
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": provenance,
+        "freshness": freshness,
+        "portability": {
+            "knowledge_export": "/knowledge/export",
+            "vault_export": "/knowledge/vault/export",
+            "graph_export": "/graph/export",
+            "graph_nodes": len(graph.get("nodes", [])),
+            "graph_edges": len(graph.get("edges", [])),
+        },
+        "review": {
+            "pending_items": len(review_queue(limit=limit).get("items", [])),
+            "approval_bundle": "/review/bundle",
+            "review_actions": "/review/actions",
+        },
+        "retention": retention,
+    }
+
+
 @app.get("/privacy/retention")
 def retention_policy():
     """Return local data-retention settings."""
