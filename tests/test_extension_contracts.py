@@ -6,6 +6,7 @@ from backend.connectors.catalog import connector_keys, list_source_connectors
 from backend.connectors.confluence import ConfluenceConnector
 from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
+from backend.connectors.jira import JiraConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
@@ -71,6 +72,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("notion", extensions["runtime"]["connectors"])
         self.assertIn("google_drive", extensions["runtime"]["connectors"])
         self.assertIn("confluence", extensions["runtime"]["connectors"])
+        self.assertIn("jira", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -309,6 +311,67 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Runbook")
         self.assertIn("Restart service", docs[0].text)
         self.assertEqual(docs[0].metadata["kind"], "page")
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_jira_connector_normalizes_issues(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/rest/api/3/myself"):
+                    return FakeResponse({"accountType": "atlassian"})
+                if url.endswith("/rest/api/3/search"):
+                    return FakeResponse({
+                        "issues": [
+                            {
+                                "id": "10001",
+                                "key": "ENG-7",
+                                "fields": {
+                                    "summary": "Fix sprint blocker",
+                                    "description": {"content": [{"content": [{"text": "Database migration is blocked."}]}]},
+                                    "status": {"name": "In Progress"},
+                                    "assignee": {"displayName": "Maya"},
+                                    "reporter": {"displayName": "Alex"},
+                                    "project": {"key": "ENG"},
+                                    "issuetype": {"name": "Bug"},
+                                    "priority": {"name": "High"},
+                                    "labels": ["blocker"],
+                                    "updated": "2026-01-04T00:00:00Z",
+                                    "created": "2026-01-01T00:00:00Z",
+                                    "parent": {"key": "ENG-1"},
+                                    "customfield_10020": [{"name": "Sprint 12"}],
+                                    "comment": {"comments": [
+                                        {
+                                            "author": {"displayName": "Sam"},
+                                            "body": {"content": [{"content": [{"text": "Waiting on deploy window."}]}]},
+                                        }
+                                    ]},
+                                },
+                            }
+                        ]
+                    })
+                return FakeResponse({})
+
+        connector = JiraConnector(
+            base_url="https://example.invalid",
+            email="demo@example.invalid",
+            token="secret",
+            session=FakeSession(),
+        )
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Fix sprint blocker")
+        self.assertIn("Database migration", docs[0].text)
+        self.assertIn("Waiting on deploy window", docs[0].text)
+        self.assertEqual(docs[0].metadata["key"], "ENG-7")
         self.assertNotIn("secret", str(connector.health()))
 
 

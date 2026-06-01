@@ -71,6 +71,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/notion/preview")',
         '@app.post("/extensions/connectors/google-drive/preview")',
         '@app.post("/extensions/connectors/confluence/preview")',
+        '@app.post("/extensions/connectors/jira/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -179,6 +180,13 @@ def main() -> None:
         "SUDOBRAIN_CONFLUENCE_BASE_URL",
         "/api/v2/pages",
         "_strip_html",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/jira.py", [
+        "class JiraConnector",
+        "SUDOBRAIN_JIRA_BASE_URL",
+        "/rest/api/3/search",
+        "_adf_to_text",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

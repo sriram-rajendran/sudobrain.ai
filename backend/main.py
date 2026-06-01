@@ -2363,6 +2363,15 @@ class ConfluencePreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class JiraPreviewRequest(BaseModel):
+    base_url: Optional[str] = Field(None, max_length=1000)
+    email: Optional[str] = Field(None, max_length=320)
+    token: Optional[str] = Field(None, max_length=500)
+    bearer_token: Optional[str] = Field(None, max_length=1000)
+    jql: Optional[str] = Field(None, max_length=1000)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2485,6 +2494,20 @@ def extension_confluence_preview(request: ConfluencePreviewRequest):
         token=request.token,
         bearer_token=request.bearer_token,
         space_id=request.space_id,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/jira/preview")
+def extension_jira_preview(request: JiraPreviewRequest):
+    """Preview the read-only Jira connector without ingesting data."""
+    from backend.extensions.runtime import jira_preview
+    return jira_preview(
+        base_url=request.base_url,
+        email=request.email,
+        token=request.token,
+        bearer_token=request.bearer_token,
+        jql=request.jql,
         limit=request.limit,
     )
 

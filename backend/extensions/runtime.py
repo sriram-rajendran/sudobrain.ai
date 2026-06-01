@@ -7,6 +7,7 @@ from backend.connectors.catalog import list_source_connectors
 from backend.connectors.confluence import ConfluenceConnector, preview_documents as preview_confluence_documents
 from backend.connectors.google_drive import GoogleDriveConnector, preview_documents as preview_drive_documents
 from backend.connectors.github import GitHubConnector, preview_documents
+from backend.connectors.jira import JiraConnector, preview_documents as preview_jira_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
 from backend.intelligence.sample_module import KeywordRiskModule
@@ -20,7 +21,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -93,6 +94,28 @@ def confluence_preview(
     documents = []
     if health.get("ok"):
         documents = preview_confluence_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def jira_preview(
+    base_url: str | None = None,
+    email: str | None = None,
+    token: str | None = None,
+    bearer_token: str | None = None,
+    jql: str | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = JiraConnector(
+        base_url=base_url,
+        email=email,
+        token=token,
+        bearer_token=bearer_token,
+        jql=jql,
+    )
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_jira_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

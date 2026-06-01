@@ -73,6 +73,19 @@ Use `SUDOBRAIN_CONFLUENCE_BASE_URL` plus either
 `SUDOBRAIN_CONFLUENCE_BEARER_TOKEN`. Optional `SUDOBRAIN_CONFLUENCE_SPACE_ID`
 limits previews to a single space.
 
+Preview Jira without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/jira/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"base_url":"https://example.atlassian.net","jql":"ORDER BY updated DESC","limit":10}'
+```
+
+Use `SUDOBRAIN_JIRA_BASE_URL` plus either
+`SUDOBRAIN_JIRA_EMAIL`/`SUDOBRAIN_JIRA_TOKEN` or
+`SUDOBRAIN_JIRA_BEARER_TOKEN`. Optional `SUDOBRAIN_JIRA_JQL` scopes previews to
+the projects, epics, sprints, blockers, or ownership slices you care about.
+
 ## Source Families
 
 ### Engineering
