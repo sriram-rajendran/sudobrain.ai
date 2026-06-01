@@ -431,7 +431,9 @@ struct GraphCanvasPanel: View {
 
     private func point(for index: Int, count: Int, radius: CGFloat) -> CGPoint {
         let angle = (Double(index) / Double(max(count, 1))) * Double.pi * 2
-        return CGPoint(x: 160 + cos(angle) * radius, y: 130 + sin(angle) * radius)
+        let x = CGFloat(160) + CGFloat(Darwin.cos(angle)) * radius
+        let y = CGFloat(130) + CGFloat(Darwin.sin(angle)) * radius
+        return CGPoint(x: x, y: y)
     }
 
     private func color(kind: String) -> Color {
