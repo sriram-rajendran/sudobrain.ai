@@ -13,3 +13,4 @@
 - Added extension SDK protocols for connectors, intelligence modules, and workflow actions.
 - Added a read-only local Markdown connector example.
 - Added a lightweight SudoBrain MCP server scaffold and documentation.
+- Added safe model-provider configuration reporting for local, OpenAI-compatible, and opt-in cloud providers.

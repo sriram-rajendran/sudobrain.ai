@@ -12,6 +12,7 @@ nav:
   - Feature Matrix: feature-matrix.md
   - Plugin Development: plugin-development.md
   - MCP Server: mcp.md
+  - Model Providers: model-providers.md
   - Roadmap: roadmap.md
   - Privacy: privacy.md
   - Release Checklist: release-checklist.md

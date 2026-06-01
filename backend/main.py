@@ -1076,6 +1076,11 @@ def config_status():
         "SUDOBRAIN_AUTO_SOURCE_SYNC", "SUDOBRAIN_SOURCE_SYNC_INTERVAL_MINUTES",
         "GMAIL_CREDENTIALS_FILE", "GMAIL_TOKEN_FILE", "GCAL_TOKEN_FILE",
         "SLACK_USER_TOKEN", "LINEAR_API_TOKEN", "FATHOM_API_TOKEN",
+        "SUDOBRAIN_OPENAI_COMPAT_BASE_URL", "SUDOBRAIN_OPENAI_COMPAT_MODEL",
+        "SUDOBRAIN_OPENAI_COMPAT_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+        "GEMINI_API_KEY", "GEMINI_MODEL", "OPENROUTER_API_KEY", "OPENROUTER_MODEL",
+        "OPENROUTER_BASE_URL", "GROQ_API_KEY", "GROQ_MODEL", "AWS_PROFILE",
+        "BEDROCK_MODEL", "LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL",
         "SUDOBRAIN_PROJECTS_ROOT", "SUDOBRAIN_PROJECT_ALIASES_JSON",
         "SUDOBRAIN_PERSON_ALIASES_JSON",
     ]
@@ -2844,9 +2849,10 @@ def calendar_next_meeting():
 def models_status():
     """Get available models and their tier assignments."""
     from backend.ai.model_router import _get_available_models, TIER_MAP, get_model
+    from backend.ai.providers import configured_providers
     available = list(_get_available_models())
     assignments = {task: get_model(task) for task in TIER_MAP}
-    return {"available_models": available, "task_assignments": assignments}
+    return {"available_models": available, "task_assignments": assignments, "provider_config": configured_providers()}
 
 
 @app.post("/models/refresh")
