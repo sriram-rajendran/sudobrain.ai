@@ -98,6 +98,18 @@ Use `SUDOBRAIN_ASANA_TOKEN` with optional `SUDOBRAIN_ASANA_WORKSPACE_GID` or
 `SUDOBRAIN_ASANA_PROJECT_GID` to scope tasks, projects, assignees, due dates,
 and section context.
 
+Preview Trello without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/trello/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"board_id":"board-id","limit":10}'
+```
+
+Use `SUDOBRAIN_TRELLO_API_KEY` and `SUDOBRAIN_TRELLO_TOKEN` with optional
+`SUDOBRAIN_TRELLO_BOARD_ID` to scope boards, lists, cards, labels, members, and
+comments.
+
 ## Source Families
 
 ### Engineering

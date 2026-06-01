@@ -2379,6 +2379,13 @@ class AsanaPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class TrelloPreviewRequest(BaseModel):
+    api_key: Optional[str] = Field(None, max_length=500)
+    token: Optional[str] = Field(None, max_length=500)
+    board_id: Optional[str] = Field(None, max_length=120)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2527,6 +2534,18 @@ def extension_asana_preview(request: AsanaPreviewRequest):
         token=request.token,
         workspace_gid=request.workspace_gid,
         project_gid=request.project_gid,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/trello/preview")
+def extension_trello_preview(request: TrelloPreviewRequest):
+    """Preview the read-only Trello connector without ingesting data."""
+    from backend.extensions.runtime import trello_preview
+    return trello_preview(
+        api_key=request.api_key,
+        token=request.token,
+        board_id=request.board_id,
         limit=request.limit,
     )
 

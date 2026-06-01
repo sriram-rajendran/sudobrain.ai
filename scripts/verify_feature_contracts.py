@@ -73,6 +73,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/confluence/preview")',
         '@app.post("/extensions/connectors/jira/preview")',
         '@app.post("/extensions/connectors/asana/preview")',
+        '@app.post("/extensions/connectors/trello/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -195,6 +196,13 @@ def main() -> None:
         "SUDOBRAIN_ASANA_TOKEN",
         "/tasks",
         "assignee",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/trello.py", [
+        "class TrelloConnector",
+        "SUDOBRAIN_TRELLO_API_KEY",
+        "/boards/",
+        "commentCard",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

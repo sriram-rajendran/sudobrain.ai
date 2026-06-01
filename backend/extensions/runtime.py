@@ -11,6 +11,7 @@ from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.jira import JiraConnector, preview_documents as preview_jira_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
+from backend.connectors.trello import TrelloConnector, preview_documents as preview_trello_documents
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.plugins.registry import BUILTIN_PLUGINS, discover_plugins
 from backend.sdk import SourceDocument
@@ -22,7 +23,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -131,6 +132,20 @@ def asana_preview(
     documents = []
     if health.get("ok"):
         documents = preview_asana_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def trello_preview(
+    api_key: str | None = None,
+    token: str | None = None,
+    board_id: str | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = TrelloConnector(api_key=api_key, token=token, board_id=board_id)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_trello_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

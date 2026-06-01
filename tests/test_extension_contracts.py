@@ -10,6 +10,7 @@ from backend.connectors.github import GitHubConnector
 from backend.connectors.jira import JiraConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector
+from backend.connectors.trello import TrelloConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.sdk import SourceDocument
@@ -75,6 +76,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("confluence", extensions["runtime"]["connectors"])
         self.assertIn("jira", extensions["runtime"]["connectors"])
         self.assertIn("asana", extensions["runtime"]["connectors"])
+        self.assertIn("trello", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -415,6 +417,53 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Ship launch checklist")
         self.assertIn("Confirm onboarding", docs[0].text)
         self.assertEqual(docs[0].metadata["projects"], ["Launch"])
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_trello_connector_normalizes_cards(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, params=None, timeout=30):
+                if url.endswith("/members/me"):
+                    return FakeResponse({"username": "maya"})
+                if url.endswith("/boards/board-1/cards"):
+                    return FakeResponse([
+                        {
+                            "id": "card-1",
+                            "name": "Review launch board",
+                            "desc": "Check blockers before release.",
+                            "due": "2026-01-08T00:00:00Z",
+                            "dueComplete": False,
+                            "dateLastActivity": "2026-01-04T00:00:00Z",
+                            "shortUrl": "https://example.invalid/c/card-1",
+                            "idBoard": "board-1",
+                            "idList": "list-1",
+                            "labels": [{"name": "blocker"}],
+                            "members": [{"fullName": "Maya"}],
+                            "actions": [
+                                {
+                                    "data": {"text": "Need owner assignment."},
+                                    "memberCreator": {"fullName": "Alex"},
+                                }
+                            ],
+                        }
+                    ])
+                return FakeResponse([])
+
+        connector = TrelloConnector(api_key="key", token="secret", board_id="board-1", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Review launch board")
+        self.assertIn("Need owner assignment", docs[0].text)
+        self.assertEqual(docs[0].metadata["labels"], ["blocker"])
         self.assertNotIn("secret", str(connector.health()))
 
 
