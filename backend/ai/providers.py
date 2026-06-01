@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -70,6 +72,26 @@ PROVIDERS = {
         "local_default": True,
     },
 }
+
+
+ROUTING_RULES_PATH = Path(os.getenv("SUDOBRAIN_PROVIDER_ROUTING_PATH", os.path.expanduser("~/.sudobrain/provider_routing.json")))
+
+DEFAULT_ROUTING_RULES = [
+    {
+        "name": "private_local_default",
+        "match": {"privacy": "local"},
+        "provider": "ollama",
+        "reason": "Keep private/local requests on the default local provider.",
+        "enabled": True,
+    },
+    {
+        "name": "fast_local_companion",
+        "match": {"task": "quick_capture"},
+        "provider": "lm_studio",
+        "reason": "Route quick capture summaries to a local OpenAI-compatible runtime when available.",
+        "enabled": False,
+    },
+]
 
 
 @dataclass
@@ -244,6 +266,63 @@ def configured_providers() -> dict:
         "active_provider": active,
         "local_first_default": active in {"ollama", "lm_studio"},
         "providers": providers,
+    }
+
+
+def load_routing_rules() -> dict:
+    """Load per-task/provider routing rules without exposing secrets."""
+    rules = DEFAULT_ROUTING_RULES
+    if ROUTING_RULES_PATH.exists():
+        try:
+            payload = json.loads(ROUTING_RULES_PATH.read_text())
+            if isinstance(payload.get("rules"), list):
+                rules = payload["rules"]
+        except Exception:
+            rules = DEFAULT_ROUTING_RULES
+    return {
+        "rules": rules,
+        "path": str(ROUTING_RULES_PATH),
+        "active_provider": configured_providers()["active_provider"],
+    }
+
+
+def save_routing_rules(rules: list[dict[str, Any]]) -> dict:
+    safe_rules = []
+    known = set(PROVIDERS)
+    for rule in rules:
+        provider = str(rule.get("provider", "")).strip()
+        if provider not in known:
+            continue
+        safe_rules.append({
+            "name": str(rule.get("name") or provider)[:120],
+            "match": rule.get("match") if isinstance(rule.get("match"), dict) else {},
+            "provider": provider,
+            "reason": str(rule.get("reason") or "")[:500],
+            "enabled": bool(rule.get("enabled", True)),
+        })
+    ROUTING_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ROUTING_RULES_PATH.write_text(json.dumps({"rules": safe_rules}, indent=2, sort_keys=True))
+    return load_routing_rules()
+
+
+def choose_provider_for(task: str = "chat", privacy: str = "local") -> dict:
+    """Pick a provider from routing rules, preserving local-first defaults."""
+    config = configured_providers()
+    for rule in load_routing_rules()["rules"]:
+        if not rule.get("enabled", True):
+            continue
+        match = rule.get("match") or {}
+        if match.get("task") and match["task"] != task:
+            continue
+        if match.get("privacy") and match["privacy"] != privacy:
+            continue
+        provider = rule.get("provider")
+        if provider in config["providers"]:
+            return {"provider": provider, "rule": rule, "configured": config["providers"][provider]["configured"]}
+    return {
+        "provider": config["active_provider"],
+        "rule": {"name": "active_provider", "reason": "No routing rule matched."},
+        "configured": config["providers"].get(config["active_provider"], {}).get("configured", False),
     }
 
 

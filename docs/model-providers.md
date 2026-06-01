@@ -43,5 +43,23 @@ configured:
 curl http://127.0.0.1:8420/models/status
 ```
 
-Provider execution remains intentionally conservative; local/Ollama routing is
-the default path until provider-specific clients are implemented and reviewed.
+Provider execution is intentionally conservative. Local/Ollama routing is the
+default path, and cloud providers are used only when selected and configured.
+
+## Routing Rules
+
+Per-task routing rules live outside the repository by default at:
+
+```bash
+~/.sudobrain/provider_routing.json
+```
+
+The API exposes the current routing policy and lets local users update it:
+
+```bash
+curl http://127.0.0.1:8420/models/routing-rules
+curl "http://127.0.0.1:8420/models/route?task=chat&privacy=local"
+```
+
+Rules are matched by task and privacy labels, so private work can stay on local
+models while opt-in workflows can target an OpenAI-compatible or cloud provider.

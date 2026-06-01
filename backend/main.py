@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+import re
+import time
 import uuid
 import hashlib
 from datetime import datetime, timezone
@@ -10,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, Query
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -45,6 +47,43 @@ TRUST_LOCALHOST = os.getenv("SUDOBRAIN_TRUST_LOCALHOST", "true").strip().lower()
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/fathom/webhook"}
 
 
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Small local quota guard for open-source/default deployments."""
+
+    def __init__(self, app, requests_per_minute: int | None = None):
+        super().__init__(app)
+        try:
+            raw_limit = requests_per_minute if requests_per_minute is not None else int(os.getenv("SUDOBRAIN_RATE_LIMIT_PER_MINUTE", "120"))
+        except ValueError:
+            raw_limit = 120
+        self.requests_per_minute = max(0, raw_limit)
+        self.window_seconds = 60
+        self._hits: dict[str, list[float]] = {}
+
+    async def dispatch(self, request: Request, call_next):
+        if self.requests_per_minute <= 0 or request.url.path in PUBLIC_PATHS:
+            return await call_next(request)
+
+        token = request.headers.get("Authorization", "")
+        client_host = request.client.host if request.client else "unknown"
+        identity = hashlib.sha256(f"{client_host}:{token}".encode("utf-8")).hexdigest()
+        now = time.time()
+        window_start = now - self.window_seconds
+        hits = [ts for ts in self._hits.get(identity, []) if ts >= window_start]
+
+        if len(hits) >= self.requests_per_minute:
+            retry_after = max(1, int(self.window_seconds - (now - hits[0])))
+            return JSONResponse(
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+                content={"detail": "Rate limit exceeded", "retry_after_seconds": retry_after},
+            )
+
+        hits.append(now)
+        self._hits[identity] = hits
+        return await call_next(request)
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -67,6 +106,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 
 CONFIG_PATH = Path(DATA_DIR if "DATA_DIR" in globals() else os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain"))) / "config.json"
@@ -1084,6 +1124,10 @@ class LocalConfigRequest(BaseModel):
     values: dict = Field(default_factory=dict)
 
 
+class ProviderRoutingRequest(BaseModel):
+    rules: list[dict] = Field(default_factory=list)
+
+
 @app.get("/config/status")
 def config_status():
     """Return safe runtime/config fields for Settings and integration setup."""
@@ -1130,6 +1174,27 @@ def save_config(request: LocalConfigRequest):
             existing[key] = value
     _save_local_config(existing)
     return {"status": "saved", "config_path": str(CONFIG_PATH), "keys": sorted(incoming.keys())}
+
+
+@app.get("/models/routing-rules")
+def model_routing_rules():
+    """Return safe per-task provider routing rules."""
+    from backend.ai.providers import load_routing_rules
+    return load_routing_rules()
+
+
+@app.post("/models/routing-rules")
+def save_model_routing_rules(request: ProviderRoutingRequest):
+    """Save per-model/provider routing rules outside the repository."""
+    from backend.ai.providers import save_routing_rules
+    return save_routing_rules(request.rules)
+
+
+@app.get("/models/route")
+def model_route(task: str = "chat", privacy: str = "local"):
+    """Preview which provider would be used for a task/privacy combination."""
+    from backend.ai.providers import choose_provider_for
+    return choose_provider_for(task=task, privacy=privacy)
 
 
 @app.get("/review/queue")
@@ -1206,7 +1271,8 @@ def review_queue(
 
 @app.post("/review/{kind}/{item_id}/accept")
 def accept_review_item(kind: str, item_id: int):
-    return {"status": "accepted", "kind": kind, "id": item_id}
+    action_id = _record_review_action(kind, item_id, "accepted")
+    return {"status": "accepted", "kind": kind, "id": item_id, "action_id": action_id}
 
 
 @app.post("/review/{kind}/{item_id}/dismiss")
@@ -1214,12 +1280,85 @@ def dismiss_review_item(kind: str, item_id: int):
     table_map = {"task": "action_items", "promise": "promises", "reminder": "reminders"}
     table = table_map.get(kind)
     if not table:
-        return {"status": "dismissed", "kind": kind, "id": item_id}
+        action_id = _record_review_action(kind, item_id, "dismissed")
+        return {"status": "dismissed", "kind": kind, "id": item_id, "action_id": action_id}
     conn = db.get_connection()
     try:
+        previous = conn.execute(f"SELECT status FROM {table} WHERE id = ?", (item_id,)).fetchone()
         conn.execute(f"UPDATE {table} SET status = 'dismissed' WHERE id = ?", (item_id,))
+        action_id = _record_review_action(kind, item_id, "dismissed", previous_status=previous["status"] if previous else None, conn=conn)
         conn.commit()
-        return {"status": "dismissed", "kind": kind, "id": item_id}
+        return {"status": "dismissed", "kind": kind, "id": item_id, "action_id": action_id}
+    finally:
+        conn.close()
+
+
+def _init_review_actions(conn) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS review_actions (
+            id SERIAL PRIMARY KEY,
+            kind TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            previous_status TEXT,
+            undone BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            undone_at TIMESTAMP
+        )
+    """)
+
+
+def _record_review_action(kind: str, item_id: int, action: str, previous_status: str | None = None, conn=None) -> int | None:
+    own_conn = conn is None
+    conn = conn or db.get_connection()
+    try:
+        _init_review_actions(conn)
+        cursor = conn.execute(
+            "INSERT INTO review_actions (kind, item_id, action, previous_status) VALUES (?, ?, ?, ?)",
+            (kind, item_id, action, previous_status),
+        )
+        if own_conn:
+            conn.commit()
+        return getattr(cursor, "lastrowid", None)
+    finally:
+        if own_conn:
+            conn.close()
+
+
+@app.get("/review/actions")
+def review_actions(limit: int = Query(default=100, ge=1, le=500)):
+    """Return review accept/dismiss actions so extraction decisions are auditable."""
+    conn = db.get_connection()
+    try:
+        _init_review_actions(conn)
+        rows = conn.execute("SELECT * FROM review_actions ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/review/actions/{action_id}/undo")
+def undo_review_action(action_id: int):
+    """Undo a review action when SudoBrain can safely restore the previous local status."""
+    table_map = {"task": "action_items", "promise": "promises", "reminder": "reminders"}
+    conn = db.get_connection()
+    try:
+        _init_review_actions(conn)
+        row = conn.execute("SELECT * FROM review_actions WHERE id = ?", (action_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Review action not found")
+        action = dict(row)
+        if action.get("undone"):
+            return {"status": "already_undone", "action_id": action_id}
+        restored = False
+        table = table_map.get(action.get("kind"))
+        previous_status = action.get("previous_status")
+        if table and previous_status:
+            conn.execute(f"UPDATE {table} SET status = ? WHERE id = ?", (previous_status, action["item_id"]))
+            restored = True
+        conn.execute("UPDATE review_actions SET undone = TRUE, undone_at = CURRENT_TIMESTAMP WHERE id = ?", (action_id,))
+        conn.commit()
+        return {"status": "undone", "action_id": action_id, "restored_status": restored}
     finally:
         conn.close()
 
@@ -1747,6 +1886,21 @@ def chat(request: ChatRequest):
         sources=result["sources"],
         confidence=result["confidence"],
     )
+
+
+@app.post("/chat/stream")
+def chat_stream(request: ChatRequest):
+    """Stream a chat response as server-sent events for web and app clients."""
+    result = chat(request)
+
+    def events():
+        metadata = {"type": "metadata", "sources": result.sources, "confidence": result.confidence}
+        yield f"data: {json.dumps(metadata)}\n\n"
+        for token in re.findall(r"\S+\s*", result.answer):
+            yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 # ── Daily Life Endpoints ──
@@ -3676,6 +3830,59 @@ def export_knowledge(format: str = Query(default="json", pattern="^(json|markdow
     if format == "markdown":
         return PlainTextResponse(_knowledge_export_markdown(bundle), media_type="text/markdown")
     return bundle
+
+
+def _safe_vault_name(value: str, fallback: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9._ -]+", "", value or "").strip().replace(" ", "-")
+    return (value or fallback)[:80]
+
+
+@app.post("/knowledge/vault/export")
+def export_knowledge_vault(limit: int = Query(default=5000, ge=1, le=20000)):
+    """Write an editable Markdown/JSON knowledge vault under the local data directory."""
+    bundle = _knowledge_export_bundle(limit=limit)
+    export_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    vault_dir = Path(DATA_DIR) / "knowledge_vault" / export_id
+    vault_dir.mkdir(parents=True, exist_ok=True)
+    (vault_dir / "sudobrain-export.json").write_text(json.dumps(bundle, indent=2, default=str))
+    (vault_dir / "README.md").write_text(_knowledge_export_markdown(bundle))
+
+    tables = bundle.get("tables", {})
+    written = ["sudobrain-export.json", "README.md"]
+    for table_name in ("projects", "people", "decisions", "promises", "action_items"):
+        rows = tables.get(table_name, [])
+        if not isinstance(rows, list):
+            continue
+        table_dir = vault_dir / table_name
+        table_dir.mkdir(parents=True, exist_ok=True)
+        for index, row in enumerate(rows, start=1):
+            title = row.get("name") or row.get("text") or row.get("description") or row.get("email") or str(row.get("id") or index)
+            filename = f"{index:04d}-{_safe_vault_name(str(title), table_name)}.md"
+            frontmatter = {
+                "sudobrain_table": table_name,
+                "sudobrain_id": row.get("id"),
+                "exported_at": bundle.get("exported_at"),
+            }
+            body = [
+                "---",
+                *[f"{key}: {json.dumps(value, default=str)}" for key, value in frontmatter.items()],
+                "---",
+                "",
+                f"# {title}",
+                "",
+            ]
+            for key, value in row.items():
+                if value not in (None, ""):
+                    body.append(f"- **{key}**: {value}")
+            (table_dir / filename).write_text("\n".join(body).strip() + "\n")
+            written.append(str(Path(table_name) / filename))
+
+    return {
+        "status": "exported",
+        "path": str(vault_dir),
+        "files": written,
+        "obsidian_compatible": True,
+    }
 
 
 def _table_row(table: str, item_id: str) -> dict | None:
