@@ -49,6 +49,11 @@ def main() -> None:
         '@app.get("/graph/edge/explain")',
         '@app.get("/privacy/retention")',
         '@app.post("/chat/feedback")',
+        '@app.get("/documents/library")',
+        '@app.get("/documents/watch-folders")',
+        '@app.post("/bookmarks")',
+        '@app.post("/webpage/summarize")',
+        '@app.post("/ocr/extract")',
     ])
     require_text("app/SudoBrain/AppState.swift", [
         "case onboarding",

@@ -13,6 +13,8 @@ It exposes:
 - `sudobrain_decisions`
 - `sudobrain_promises`
 - `sudobrain_projects`
+- `sudobrain_people`
+- `sudobrain_reports`
 
 The server is intentionally dependency-light. It is a scaffold for MCP clients
 and contributors before adopting a full MCP SDK.

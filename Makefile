@@ -1,4 +1,4 @@
-.PHONY: verify verify-fast swift-build python-compile scan-secrets demo smoke mcp-server docker-up docker-full-up clean
+.PHONY: verify verify-fast swift-build python-compile test scan-secrets demo smoke mcp-server docker-up docker-full-up clean
 
 verify:
 	python3 scripts/verify_public_repo.py
@@ -25,12 +25,15 @@ swift-build:
 	cd app && swift build
 
 python-compile:
-	python3 -m compileall -q backend scripts
-	find backend scripts -type d -name __pycache__ -exec rm -rf {} +
+	python3 -m compileall -q backend scripts tests
+	find backend scripts tests -type d -name __pycache__ -exec rm -rf {} +
+
+test:
+	python3 -m unittest discover -s tests
 
 scan-secrets:
 	gitleaks detect --source . --redact --verbose
 
 clean:
 	rm -rf app/.build
-	find backend scripts -type d -name __pycache__ -exec rm -rf {} +
+	find backend scripts tests -type d -name __pycache__ -exec rm -rf {} +

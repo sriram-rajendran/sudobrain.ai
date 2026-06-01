@@ -16,3 +16,5 @@
 - Added safe model-provider configuration reporting for local, OpenAI-compatible, and opt-in cloud providers.
 - Added provenance, source freshness, graph export, retention preview, and chat feedback APIs.
 - Added workflow templates, approval queue, trace history, and app surfaces.
+- Added document library, bookmark, folder watch, webpage summary, and OCR text handoff scaffolds.
+- Added sample intelligence module, sample workflow action, expanded MCP tools, and unit contract tests.

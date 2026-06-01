@@ -42,6 +42,16 @@ TOOLS = [
         "description": "List known projects.",
         "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer"}}},
     },
+    {
+        "name": "sudobrain_people",
+        "description": "List known people.",
+        "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer"}}},
+    },
+    {
+        "name": "sudobrain_reports",
+        "description": "Return a lightweight local report summary.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -82,6 +92,21 @@ def call_tool(name: str, arguments: dict[str, Any]) -> dict:
                 (limit,),
             ).fetchall()
             return result([dict(row) for row in rows])
+        if name == "sudobrain_people":
+            rows = conn.execute(
+                "SELECT id, name, email, role, organization, last_interaction, health_score FROM people ORDER BY last_interaction DESC NULLS LAST LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return result([dict(row) for row in rows])
+        if name == "sudobrain_reports":
+            task_count = conn.execute("SELECT COUNT(*) AS count FROM action_items WHERE status = 'pending'").fetchone()
+            promise_count = conn.execute("SELECT COUNT(*) AS count FROM promises WHERE status = 'pending'").fetchone()
+            decision_count = conn.execute("SELECT COUNT(*) AS count FROM decisions").fetchone()
+            return result({
+                "pending_tasks": task_count["count"] if task_count else 0,
+                "pending_promises": promise_count["count"] if promise_count else 0,
+                "decisions": decision_count["count"] if decision_count else 0,
+            })
     finally:
         conn.close()
 

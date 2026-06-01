@@ -40,3 +40,10 @@ for document in connector.fetch(limit=10):
 - Actions that send messages, update third-party systems, or mutate local data
   should set `requires_approval=True`.
 - Results should be structured enough to show in execution history.
+
+## Sample Intelligence Module And Action
+
+- `backend/intelligence/sample_module.py` demonstrates an `IntelligenceModule`
+  that emits risk signals from source documents.
+- `backend/actions/sample_workflow_action.py` demonstrates an approval-aware
+  workflow action that can be previewed before execution.

@@ -33,6 +33,8 @@ decisions, promises, and project risk.
 - Workflow action SDK: started in `backend/sdk/interfaces.py`.
 - Local Markdown connector example: shipped in `backend/connectors/local_markdown.py`.
 - MCP server for SudoBrain knowledge: started in `scripts/sudobrain_mcp_server.py`.
+- Sample intelligence module: shipped in `backend/intelligence/sample_module.py`.
+- Sample workflow action: shipped in `backend/actions/sample_workflow_action.py`.
 - MCP client/tool support: planned.
 - Plugin developer documentation: shipped in `docs/plugin-development.md`.
 
@@ -52,7 +54,7 @@ decisions, promises, and project risk.
 - OpenAI-compatible, Anthropic, Gemini, OpenRouter, Groq, Bedrock, and LM Studio configuration: started in `.env.example` and `backend/ai/providers.py`.
 - Usage analytics: planned.
 - Admin/debug dashboard: planned.
-- Fixture-based integration tests: planned.
+- Fixture-based integration tests: started.
 - Release process and changelog: started.
 
 ## Product Principles

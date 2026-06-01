@@ -2210,6 +2210,88 @@ async def ingest_document(request: Request):
     }
 
 
+@app.get("/documents/library")
+def document_library(limit: int = 100):
+    """List locally registered documents."""
+    from backend.documents.library import list_documents
+    return list_documents(min(limit, 500))
+
+
+@app.post("/documents/library")
+async def register_library_document(request: Request):
+    """Register a local document or extracted text record."""
+    from backend.documents.library import register_document
+    payload = await request.json()
+    return register_document(
+        path=payload.get("path", ""),
+        text=payload.get("text", ""),
+        title=payload.get("title"),
+        source_type=payload.get("source_type", "file"),
+        metadata_json=json.dumps(payload.get("metadata", {})),
+    )
+
+
+@app.get("/documents/watch-folders")
+def watched_folders():
+    """List local folders configured for document watch mode."""
+    from backend.documents.library import list_watched_folders
+    return list_watched_folders()
+
+
+@app.post("/documents/watch-folders")
+async def add_watch_folder(request: Request):
+    """Register a folder for future watch-mode ingestion."""
+    from backend.documents.library import add_watched_folder
+    payload = await request.json()
+    return add_watched_folder(payload.get("path", ""), payload.get("glob", "**/*"))
+
+
+@app.get("/bookmarks")
+def bookmarks(limit: int = 100):
+    """List archived bookmarks."""
+    from backend.documents.library import list_bookmarks
+    return list_bookmarks(min(limit, 500))
+
+
+@app.post("/bookmarks")
+async def add_bookmark_capture(request: Request):
+    """Archive a bookmark or webpage summary."""
+    from backend.documents.library import add_bookmark
+    payload = await request.json()
+    return add_bookmark(
+        url=payload.get("url", ""),
+        title=payload.get("title", ""),
+        summary=payload.get("summary", ""),
+        metadata_json=json.dumps(payload.get("metadata", {})),
+    )
+
+
+@app.post("/webpage/summarize")
+async def summarize_webpage_capture(request: Request):
+    """Summarize provided webpage text without fetching remote content."""
+    payload = await request.json()
+    text = " ".join((payload.get("text") or "").split())
+    summary = text[:700] + ("..." if len(text) > 700 else "")
+    return {"title": payload.get("title", ""), "url": payload.get("url", ""), "summary": summary, "mode": "local_text_only"}
+
+
+@app.post("/ocr/extract")
+async def ocr_extract_placeholder(request: Request):
+    """Register OCR/image ingestion text from a local client or OCR worker."""
+    payload = await request.json()
+    text = payload.get("text", "")
+    if not text:
+        return {"status": "needs_client_ocr", "message": "Send extracted text from the client or OCR worker."}
+    from backend.documents.library import register_document
+    return register_document(
+        path=payload.get("path", "image://uploaded"),
+        text=text,
+        title=payload.get("title", "OCR capture"),
+        source_type="ocr",
+        metadata_json=json.dumps(payload.get("metadata", {})),
+    )
+
+
 # ── Smart Search (#9) ──
 
 @app.get("/search/smart")
