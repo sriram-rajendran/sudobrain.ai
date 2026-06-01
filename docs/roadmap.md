@@ -27,6 +27,7 @@ decisions, promises, and project risk.
 - Source freshness dashboard: backend started via `/sources/freshness`.
 - Review queue filters by source, type, confidence, project, and age: shipped in `/review/queue`.
 - Reversible extraction review actions: shipped via `/review/actions` and undo endpoints.
+- Approval bundles for extracted knowledge: shipped via `/review/bundle` and the macOS Review Queue.
 - Editable Markdown/JSON knowledge vault export: shipped via `/knowledge/vault/export`.
 
 ## P2: Make SudoBrain Extensible

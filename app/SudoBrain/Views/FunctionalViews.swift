@@ -244,17 +244,24 @@ struct SourceSyncView: View {
 
 struct KnowledgeReviewView: View {
     @State private var items: [[String: Any]] = []
+    @State private var bundle: [String: Any] = [:]
     @State private var message = ""
 
     var body: some View {
         VStack(spacing: 0) {
             header("Review Queue", systemImage: "checklist.checked") {
+                Button { Task { await exportBundle() } } label: { Label("Bundle", systemImage: "shippingbox") }
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
             }
             if items.isEmpty {
                 emptyState(message.isEmpty ? "No extracted knowledge waiting for review" : message, icon: "checkmark.seal")
             } else {
                 List {
+                    if !bundle.isEmpty {
+                        Section("Approval Bundle") {
+                            KeyValueCard(title: "Bundle", values: bundle)
+                        }
+                    }
                     ForEach(items.indices, id: \.self) { i in
                         let item = items[i]
                         VStack(alignment: .leading, spacing: 8) {
@@ -286,6 +293,11 @@ struct KnowledgeReviewView: View {
         _ = try? await APIClient.shared.post("/review/\(kind)/\(id)/\(action)", body: [:])
         message = "\(action.capitalized)ed \(kind)"
         await load()
+    }
+
+    private func exportBundle() async {
+        bundle = (try? await APIClient.shared.getRawObject("/review/bundle?limit=100")) ?? [:]
+        message = "Prepared review approval bundle"
     }
 }
 

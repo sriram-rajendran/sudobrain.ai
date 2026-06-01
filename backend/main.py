@@ -1388,6 +1388,81 @@ def undo_review_action(action_id: int):
         conn.close()
 
 
+def _review_bundle_payload(limit: int, kind: Optional[str] = None, min_confidence: Optional[float] = None) -> dict:
+    queue = review_queue(limit=limit, kind=kind, min_confidence=min_confidence)
+    items = queue.get("items", [])
+    bundle_items = []
+    for item in items:
+        review_kind = item.get("review_kind", "")
+        item_id = item.get("id")
+        provenance = {}
+        if review_kind and item_id is not None:
+            try:
+                provenance = knowledge_provenance(review_kind, str(item_id))
+            except Exception:
+                provenance = {}
+        bundle_items.append({
+            "kind": review_kind,
+            "id": item_id,
+            "text": item.get("review_text") or item.get("text") or item.get("description") or "",
+            "source": item.get("source", ""),
+            "confidence": item.get("confidence"),
+            "created_at": item.get("created_at", ""),
+            "accept_url": f"/review/{review_kind}/{item_id}/accept",
+            "dismiss_url": f"/review/{review_kind}/{item_id}/dismiss",
+            "provenance": provenance,
+        })
+    return {
+        "version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "filters": {"kind": kind, "min_confidence": min_confidence, "limit": limit},
+        "total": len(bundle_items),
+        "items": bundle_items,
+    }
+
+
+def _review_bundle_markdown(bundle: dict) -> str:
+    lines = [
+        "# SudoBrain Review Approval Bundle",
+        "",
+        f"Created at: {bundle.get('created_at', '')}",
+        f"Items: {bundle.get('total', 0)}",
+        "",
+    ]
+    for item in bundle.get("items", []):
+        lines.extend([
+            f"## {str(item.get('kind') or 'item').title()} #{item.get('id')}",
+            "",
+            str(item.get("text") or "").strip(),
+            "",
+            f"- Source: {item.get('source') or 'unknown'}",
+            f"- Confidence: {item.get('confidence')}",
+            f"- Accept: `{item.get('accept_url')}`",
+            f"- Dismiss: `{item.get('dismiss_url')}`",
+            "",
+        ])
+        provenance = item.get("provenance") or {}
+        if provenance:
+            lines.extend(["### Provenance", ""])
+            lines.append(f"- Confidence signals: {', '.join((provenance.get('confidence') or {}).get('signals', []))}")
+            lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
+@app.get("/review/bundle")
+def review_approval_bundle(
+    format: str = Query(default="json", pattern="^(json|markdown)$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    kind: Optional[str] = None,
+    min_confidence: Optional[float] = Query(default=None, ge=0, le=1),
+):
+    """Export a human-reviewable approval bundle for pending extracted knowledge."""
+    bundle = _review_bundle_payload(limit=limit, kind=kind, min_confidence=min_confidence)
+    if format == "markdown":
+        return PlainTextResponse(_review_bundle_markdown(bundle), media_type="text/markdown")
+    return bundle
+
+
 @app.get("/people")
 def list_people():
     """List all people with their stats."""
