@@ -3148,6 +3148,299 @@ def export_knowledge(format: str = Query(default="json", pattern="^(json|markdow
     return bundle
 
 
+def _table_row(table: str, item_id: str) -> dict | None:
+    allowed = {"action_items", "decisions", "promises", "people", "projects", "segments", "transcripts", "recordings"}
+    if table not in allowed:
+        return None
+    conn = db.get_connection()
+    try:
+        row = conn.execute(f"SELECT * FROM {table} WHERE id = ? LIMIT 1", (item_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _confidence_for_row(kind: str, row: dict) -> dict:
+    signals = []
+    score = 0.55
+    if row.get("transcript_id") or row.get("recording_id"):
+        score += 0.15
+        signals.append("linked_to_transcript")
+    if row.get("source_start") is not None or row.get("source_end") is not None:
+        score += 0.1
+        signals.append("timestamped_source")
+    if row.get("project"):
+        score += 0.05
+        signals.append("project_context")
+    if row.get("due_date"):
+        score += 0.05
+        signals.append("dated_commitment")
+    if kind == "people" and row.get("email"):
+        score += 0.15
+        signals.append("email_identity")
+    score = max(0.05, min(score, 0.98))
+    return {"score": round(score, 2), "signals": signals or ["stored_local_record"]}
+
+
+@app.get("/knowledge/provenance/{kind}/{item_id}")
+def knowledge_provenance(kind: str, item_id: str):
+    """Explain where a knowledge item came from and how confident SudoBrain should be."""
+    table_map = {
+        "action": "action_items",
+        "task": "action_items",
+        "decision": "decisions",
+        "promise": "promises",
+        "person": "people",
+        "project": "projects",
+        "segment": "segments",
+    }
+    table = table_map.get(kind, kind)
+    row = _table_row(table, item_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Knowledge item not found")
+
+    source = {}
+    transcript_id = row.get("transcript_id")
+    if transcript_id:
+        transcript = _table_row("transcripts", transcript_id)
+        if transcript:
+            source["transcript"] = {
+                "id": transcript.get("id"),
+                "recording_id": transcript.get("recording_id"),
+                "engine": transcript.get("engine"),
+                "processed_at": transcript.get("processed_at"),
+            }
+            recording_id = transcript.get("recording_id")
+            recording = _table_row("recordings", recording_id) if recording_id else None
+            if recording:
+                source["recording"] = {
+                    "id": recording.get("id"),
+                    "mode": recording.get("mode"),
+                    "created_at": recording.get("created_at"),
+                    "status": recording.get("status"),
+                }
+
+    return {
+        "kind": kind,
+        "table": table,
+        "item": row,
+        "source": source,
+        "confidence": _confidence_for_row(table, row),
+        "explanation": "This item is derived from local SudoBrain storage. Linked transcript and recording metadata are shown when available.",
+    }
+
+
+@app.get("/sources/freshness")
+def source_freshness():
+    """Summarize local source freshness for dashboard and onboarding use."""
+    conn = db.get_connection()
+    try:
+        checks = []
+
+        def add(source: str, sql: str, extracted_sql: str | None = None):
+            try:
+                row = conn.execute(sql).fetchone()
+                data = dict(row) if row else {}
+            except Exception as e:
+                checks.append({"source": source, "ok": False, "error": str(e), "total": 0})
+                return
+            total = int(data.get("total") or 0)
+            latest = data.get("latest")
+            extracted = 0
+            if extracted_sql:
+                try:
+                    extracted_row = conn.execute(extracted_sql).fetchone()
+                    extracted = int((dict(extracted_row) if extracted_row else {}).get("extracted") or 0)
+                except Exception:
+                    extracted = 0
+            checks.append({
+                "source": source,
+                "ok": total > 0,
+                "total": total,
+                "extracted": extracted,
+                "latest": latest,
+                "freshness": "has_data" if total > 0 else "empty",
+            })
+
+        add("recordings", "SELECT COUNT(*) AS total, MAX(created_at) AS latest FROM recordings")
+        add("transcripts", "SELECT COUNT(*) AS total, MAX(processed_at) AS latest FROM transcripts")
+        add("slack", "SELECT COUNT(*) AS total, MAX(message_at) AS latest FROM slack_messages", "SELECT COUNT(*) AS extracted FROM slack_messages WHERE extracted = TRUE")
+        add("gmail", "SELECT COUNT(*) AS total, MAX(date) AS latest FROM gmail_messages", "SELECT COUNT(*) AS extracted FROM gmail_messages WHERE extracted = TRUE")
+        add("linear", "SELECT COUNT(*) AS total, MAX(updated_at) AS latest FROM linear_issues", "SELECT COUNT(*) AS extracted FROM linear_issues WHERE extracted = TRUE")
+        add("people", "SELECT COUNT(*) AS total, MAX(last_interaction) AS latest FROM people")
+        add("projects", "SELECT COUNT(*) AS total, MAX(created_at) AS latest FROM projects")
+        return {"sources": checks, "generated_at": datetime.now(timezone.utc).isoformat()}
+    finally:
+        conn.close()
+
+
+@app.get("/graph/export")
+def graph_export(format: str = Query(default="json", pattern="^(json|markdown)$")):
+    """Export a human-reviewable graph artifact from local relational data."""
+    conn = db.get_connection()
+    try:
+        nodes = []
+        edges = []
+        for table, label, name_col in [("people", "Person", "name"), ("projects", "Project", "name")]:
+            try:
+                rows = conn.execute(f"SELECT id, {name_col} AS name FROM {table} LIMIT 1000").fetchall()
+                nodes.extend({"id": f"{label}:{r['id']}", "type": label, "label": r["name"]} for r in rows)
+            except Exception:
+                pass
+        try:
+            tasks = conn.execute("SELECT id, text, assignee, project FROM action_items LIMIT 1000").fetchall()
+            for row in tasks:
+                task_id = f"Task:{row['id']}"
+                nodes.append({"id": task_id, "type": "Task", "label": row["text"]})
+                if row.get("assignee"):
+                    edges.append({"from": task_id, "to": row["assignee"], "type": "ASSIGNED_TO", "evidence": row["text"]})
+                if row.get("project"):
+                    edges.append({"from": task_id, "to": row["project"], "type": "BELONGS_TO", "evidence": row["text"]})
+        except Exception:
+            pass
+        try:
+            decisions = conn.execute("SELECT id, text, made_by, project FROM decisions LIMIT 1000").fetchall()
+            for row in decisions:
+                dec_id = f"Decision:{row['id']}"
+                nodes.append({"id": dec_id, "type": "Decision", "label": row["text"]})
+                if row.get("made_by"):
+                    edges.append({"from": row["made_by"], "to": dec_id, "type": "MADE", "evidence": row["text"]})
+                if row.get("project"):
+                    edges.append({"from": dec_id, "to": row["project"], "type": "AFFECTS", "evidence": row["text"]})
+        except Exception:
+            pass
+        try:
+            promises = conn.execute("SELECT id, description, promised_by_name, promised_to_name FROM promises LIMIT 1000").fetchall()
+            for row in promises:
+                prom_id = f"Promise:{row['id']}"
+                nodes.append({"id": prom_id, "type": "Promise", "label": row["description"]})
+                if row.get("promised_by_name"):
+                    edges.append({"from": row["promised_by_name"], "to": prom_id, "type": "PROMISED", "evidence": row["description"]})
+                if row.get("promised_to_name"):
+                    edges.append({"from": prom_id, "to": row["promised_to_name"], "type": "OWED_TO", "evidence": row["description"]})
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+    artifact = {"version": 1, "exported_at": datetime.now(timezone.utc).isoformat(), "nodes": nodes, "edges": edges}
+    if format == "markdown":
+        lines = ["# SudoBrain Graph Export", "", "## Nodes", ""]
+        lines.extend(f"- {n['type']}: {n['label']} (`{n['id']}`)" for n in nodes)
+        lines.extend(["", "## Edges", ""])
+        lines.extend(f"- {e['from']} --{e['type']}--> {e['to']}: {e.get('evidence', '')}" for e in edges)
+        return PlainTextResponse("\n".join(lines) + "\n", media_type="text/markdown")
+    return artifact
+
+
+@app.get("/graph/edge/explain")
+def explain_graph_edge(source: str, target: str, relation: str = ""):
+    """Explain a graph edge from the portable local graph artifact."""
+    artifact = graph_export()
+    matches = [
+        edge for edge in artifact["edges"]
+        if str(edge.get("from", "")).lower() == source.lower()
+        and str(edge.get("to", "")).lower() == target.lower()
+        and (not relation or str(edge.get("type", "")).lower() == relation.lower())
+    ]
+    return {
+        "source": source,
+        "target": target,
+        "relation": relation,
+        "matches": matches,
+        "explanation": "Edges are derived from local tasks, decisions, and promises. Evidence text is included for review.",
+    }
+
+
+@app.get("/privacy/retention")
+def retention_policy():
+    """Return local data-retention settings."""
+    config = _load_local_config()
+    return {
+        "audio_retention_days": int(config.get("SUDOBRAIN_AUDIO_RETENTION_DAYS", 30) or 30),
+        "transcript_retention_days": int(config.get("SUDOBRAIN_TRANSCRIPT_RETENTION_DAYS", 365) or 365),
+        "source_retention_days": int(config.get("SUDOBRAIN_SOURCE_RETENTION_DAYS", 365) or 365),
+        "auto_delete_enabled": _truthy_env("SUDOBRAIN_RETENTION_AUTO_DELETE", False) or str(config.get("SUDOBRAIN_RETENTION_AUTO_DELETE", "")).lower() == "true",
+        "config_path": str(CONFIG_PATH),
+    }
+
+
+@app.post("/privacy/retention")
+async def save_retention_policy(request: Request):
+    """Save retention settings without deleting data."""
+    payload = await request.json()
+    allowed = {
+        "SUDOBRAIN_AUDIO_RETENTION_DAYS",
+        "SUDOBRAIN_TRANSCRIPT_RETENTION_DAYS",
+        "SUDOBRAIN_SOURCE_RETENTION_DAYS",
+        "SUDOBRAIN_RETENTION_AUTO_DELETE",
+    }
+    config = _load_local_config()
+    for key, value in payload.items():
+        if key in allowed:
+            config[key] = str(value)
+    _save_local_config(config)
+    return retention_policy()
+
+
+@app.get("/privacy/retention/preview")
+def retention_preview():
+    """Preview records that would be affected by retention settings."""
+    policy = retention_policy()
+    conn = db.get_connection()
+    try:
+        previews = {}
+        for table, column, days in [
+            ("recordings", "created_at", policy["audio_retention_days"]),
+            ("transcripts", "processed_at", policy["transcript_retention_days"]),
+            ("slack_messages", "message_at", policy["source_retention_days"]),
+            ("gmail_messages", "date", policy["source_retention_days"]),
+        ]:
+            try:
+                row = conn.execute(
+                    f"SELECT COUNT(*) AS count FROM {table} WHERE {column} < CURRENT_TIMESTAMP - INTERVAL '{int(days)} days'"
+                ).fetchone()
+                previews[table] = int(row["count"] if row else 0)
+            except Exception as e:
+                previews[table] = {"error": str(e)}
+        return {"policy": policy, "would_delete": previews, "dry_run": True}
+    finally:
+        conn.close()
+
+
+@app.post("/chat/feedback")
+async def chat_feedback(request: Request):
+    """Store answer quality feedback for later review."""
+    payload = await request.json()
+    conn = db.get_connection()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_feedback (
+                id SERIAL PRIMARY KEY,
+                query TEXT,
+                answer TEXT,
+                rating TEXT,
+                comment TEXT,
+                source_json TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "INSERT INTO chat_feedback (query, answer, rating, comment, source_json) VALUES (?, ?, ?, ?, ?)",
+            (
+                payload.get("query", ""),
+                payload.get("answer", ""),
+                payload.get("rating", ""),
+                payload.get("comment", ""),
+                json.dumps(payload.get("sources", [])),
+            ),
+        )
+        conn.commit()
+        return {"status": "saved"}
+    finally:
+        conn.close()
+
+
 @app.post("/sync/run")
 def run_unified_source_sync():
     """Run one read-only source sync pass for Gmail, Slack, and Fathom."""

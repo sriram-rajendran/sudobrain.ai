@@ -40,6 +40,12 @@ def main() -> None:
         '@app.post("/workflows/dry-run")',
         '@app.get("/sync/export")',
         '@app.post("/sync/import")',
+        '@app.get("/knowledge/provenance/{kind}/{item_id}")',
+        '@app.get("/sources/freshness")',
+        '@app.get("/graph/export")',
+        '@app.get("/graph/edge/explain")',
+        '@app.get("/privacy/retention")',
+        '@app.post("/chat/feedback")',
     ])
     require_text("app/SudoBrain/AppState.swift", [
         "case onboarding",

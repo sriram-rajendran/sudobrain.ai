@@ -19,9 +19,12 @@ decisions, promises, and project risk.
 - Source citation metadata for chat search results: started.
 - JSON and Markdown knowledge export: shipped via `/knowledge/export`.
 - Source audit endpoint: existing.
-- Provenance UI for decisions, promises, people, and graph edges: planned.
+- Provenance APIs for decisions, promises, people, and graph edges: started.
+- Confidence scoring for stored knowledge: started through provenance responses.
+- Portable graph export: started via `/graph/export`.
+- Retention policy controls: started via `/privacy/retention`.
 - Review queue filters by source, type, confidence, project, and age: planned.
-- Source freshness dashboard: planned.
+- Source freshness dashboard: backend started via `/sources/freshness`.
 
 ## P2: Make SudoBrain Extensible
 
