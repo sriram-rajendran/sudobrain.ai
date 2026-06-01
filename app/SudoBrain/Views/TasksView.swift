@@ -66,16 +66,16 @@ struct TasksView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         if !overdueTasks.isEmpty && filter != "Overdue" {
-                            TaskGroupView(title: "Overdue", tasks: overdueTasks)
+                            TaskGroupView(title: "Overdue", tasks: overdueTasks, onChange: loadTasks)
                         }
                         if !todayTasks.isEmpty {
-                            TaskGroupView(title: "Due Today", tasks: todayTasks)
+                            TaskGroupView(title: "Due Today", tasks: todayTasks, onChange: loadTasks)
                         }
                         if !upcomingTasks.isEmpty && filter != "Overdue" {
-                            TaskGroupView(title: "Upcoming", tasks: upcomingTasks)
+                            TaskGroupView(title: "Upcoming", tasks: upcomingTasks, onChange: loadTasks)
                         }
                         if filter == "Overdue" {
-                            TaskGroupView(title: "Overdue", tasks: overdueTasks)
+                            TaskGroupView(title: "Overdue", tasks: overdueTasks, onChange: loadTasks)
                         }
                     }
                     .padding(24)
@@ -111,6 +111,7 @@ struct TasksView: View {
 struct TaskGroupView: View {
     let title: String
     let tasks: [[String: Any]]
+    let onChange: () async -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -145,10 +146,34 @@ struct TaskGroupView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(title == "Overdue" ? .orange : title == "Due Today" ? .blue : .secondary)
                     }
+                    Button {
+                        Task { await complete(t["id"] as? Int) }
+                    } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .buttonStyle(.borderless)
+                    Button {
+                        Task { await snooze(t["id"] as? Int) }
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.borderless)
                 }
                 .padding(.vertical, 5)
             }
         }
+    }
+
+    private func complete(_ id: Int?) async {
+        guard let id else { return }
+        _ = try? await APIClient.shared.post("/action-items/\(id)/complete", body: [:])
+        await onChange()
+    }
+
+    private func snooze(_ id: Int?) async {
+        guard let id else { return }
+        _ = try? await APIClient.shared.post("/action-items/\(id)/snooze?days=1", body: [:])
+        await onChange()
     }
 }
 

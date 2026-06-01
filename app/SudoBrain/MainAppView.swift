@@ -115,6 +115,8 @@ struct MainAppView: View {
         switch section {
         case .today:
             TodayView(recorder: recorder)
+        case .onboarding:
+            OnboardingView()
         case .search:
             SearchView()
         case .chat:
@@ -131,6 +133,12 @@ struct MainAppView: View {
             DecisionsView()
         case .tasks:
             TasksView()
+        case .promises:
+            PromisesView()
+        case .review:
+            KnowledgeReviewView()
+        case .crossReferences:
+            CrossReferencesView()
         case .documents:
             DocumentsView()
         case .workflows:
@@ -153,6 +161,8 @@ struct MainAppView: View {
             ModelsView()
         case .health:
             HealthDataView()
+        case .localSettings:
+            LocalSettingsView()
         case .habits:
             HabitsView()
         case .expenses:

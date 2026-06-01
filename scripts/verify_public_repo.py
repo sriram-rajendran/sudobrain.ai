@@ -187,6 +187,7 @@ def main() -> None:
     check_read_only_policy()
     check_gitleaks()
     run(["git", "diff", "--check"])
+    run([sys.executable, "scripts/verify_feature_contracts.py"])
     run([sys.executable, "-m", "compileall", "-q", "backend", "scripts"])
     clean_generated()
     if (ROOT / "app" / "Package.swift").exists():

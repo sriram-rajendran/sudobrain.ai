@@ -129,6 +129,7 @@ struct RecordingRow: View {
 struct RecordingDetailView: View {
     let recording: [String: Any]
     let transcript: String
+    @State private var rich: [String: Any] = [:]
 
     var body: some View {
         ScrollView {
@@ -161,6 +162,11 @@ struct RecordingDetailView: View {
 
                 Divider()
 
+                if !rich.isEmpty {
+                    meetingKnowledge
+                    Divider()
+                }
+
                 // Transcript
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Transcript")
@@ -182,6 +188,44 @@ struct RecordingDetailView: View {
             }
             .padding(24)
         }
+        .task { await loadRichDetail() }
+    }
+
+    private var meetingKnowledge: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Meeting Intelligence")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+
+            if let minutes = rich["minutes"] as? [String: Any], !minutes.isEmpty {
+                KeyValueCard(title: "Minutes", values: minutes)
+            }
+            if let draft = rich["email_draft"] as? [String: Any], !draft.isEmpty {
+                KeyValueCard(title: "Follow-up Draft", values: draft)
+            }
+            intelligenceRows("Action Items", rich["tasks"] as? [[String: Any]] ?? [])
+            intelligenceRows("Decisions", rich["decisions"] as? [[String: Any]] ?? [])
+            intelligenceRows("Promises", rich["promises"] as? [[String: Any]] ?? [])
+        }
+    }
+
+    @ViewBuilder
+    private func intelligenceRows(_ title: String, _ rows: [[String: Any]]) -> some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                ForEach(rows.indices, id: \.self) { i in
+                    KeyValueCard(title: rows[i]["text"] as? String ?? rows[i]["description"] as? String ?? title, values: rows[i])
+                }
+            }
+        }
+    }
+
+    private func loadRichDetail() async {
+        guard let id = recording["id"] as? String else { return }
+        rich = (try? await APIClient.shared.getRawObject("/recordings/\(id)/rich")) ?? [:]
     }
 
     private var mode: String { recording["mode"] as? String ?? "voice_note" }

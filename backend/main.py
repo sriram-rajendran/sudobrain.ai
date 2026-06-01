@@ -69,6 +69,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(AuthMiddleware)
 
 
+CONFIG_PATH = Path(DATA_DIR if "DATA_DIR" in globals() else os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain"))) / "config.json"
+
+
+def _truthy_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _load_local_config() -> dict:
+    try:
+        if CONFIG_PATH.exists():
+            return json.loads(CONFIG_PATH.read_text())
+    except Exception as e:
+        logger.warning("Could not read local config: %s", e)
+    return {}
+
+
+def _save_local_config(config: dict) -> None:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(config, indent=2, sort_keys=True))
+
+
 @app.on_event("startup")
 def startup_event():
     """Start heartbeat scheduler and initialize services."""
@@ -273,6 +297,9 @@ def insights_people():
 class CaptureRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000)
     source_url: Optional[str] = Field(None, max_length=2000)
+    source_title: Optional[str] = Field(None, max_length=500)
+    project: Optional[str] = Field(None, max_length=200)
+    person: Optional[str] = Field(None, max_length=200)
 
 @app.post("/capture")
 def quick_capture(request: CaptureRequest):
@@ -306,7 +333,10 @@ def quick_capture(request: CaptureRequest):
 
     if lower.startswith("todo:") or lower.startswith("task:"):
         task_text = text.split(":", 1)[1].strip()
-        _db_write("INSERT INTO action_items (transcript_id, text, status) VALUES (?, ?, 'pending')", ("manual", task_text))
+        _db_write(
+            "INSERT INTO action_items (transcript_id, text, assignee, project, status) VALUES (?, ?, ?, ?, 'pending')",
+            ("manual", task_text, request.person, request.project),
+        )
         return {"type": "task", "text": task_text}
 
     elif lower.startswith("decision:"):
@@ -339,7 +369,8 @@ def quick_capture(request: CaptureRequest):
         idea_text = text.split(":", 1)[1].strip()
         from backend.life.manager import init_life_tables
         init_life_tables()
-        _db_write("INSERT INTO ideas (text, status) VALUES (?, 'parked')", (idea_text,))
+        context = " | ".join(part for part in [request.source_title, request.source_url] if part)
+        _db_write("INSERT INTO ideas (text, context, category, status) VALUES (?, ?, ?, 'parked')", (idea_text, context, request.project))
         return {"type": "idea", "text": idea_text}
 
     elif lower.startswith("spent:") or lower.startswith("expense:") or lower.startswith("spent "):
@@ -965,6 +996,145 @@ def trigger_heartbeat():
     return {"triggered": True, "notifications": get_notifications()}
 
 
+# ── Onboarding / Configuration ──
+
+@app.get("/onboarding/status")
+def onboarding_status():
+    """Summarize setup readiness for the desktop onboarding flow."""
+    checks = []
+
+    def add(key, label, ok, detail=""):
+        checks.append({"key": key, "label": label, "ok": bool(ok), "detail": detail})
+
+    add("backend", "Backend API", True, "FastAPI is responding")
+    try:
+        from backend.storage.resilience import check_database_integrity
+        integrity = check_database_integrity()
+        add("postgres", "Postgres", integrity.get("integrity") == "ok", f"{integrity.get('tables', 0)} tables")
+    except Exception as e:
+        add("postgres", "Postgres", False, str(e))
+    try:
+        from backend.graph.neo4j_client import is_available as neo4j_ok
+        add("neo4j", "Neo4j", neo4j_ok(), "Relationship graph")
+    except Exception as e:
+        add("neo4j", "Neo4j", False, str(e))
+    try:
+        from backend.ai.model_router import _get_available_models
+        models = sorted(_get_available_models())
+        add("models", "Local models", bool(models), ", ".join(models[:5]) or "No models detected")
+    except Exception as e:
+        add("models", "Local models", False, str(e))
+
+    for key, label, env_name in [
+        ("gmail", "Gmail", "SUDOBRAIN_SYNC_GMAIL"),
+        ("slack", "Slack", "SUDOBRAIN_SYNC_SLACK"),
+        ("fathom", "Fathom", "SUDOBRAIN_SYNC_FATHOM"),
+        ("linear", "Linear", "LINEAR_API_TOKEN"),
+        ("project_context", "Local repositories", "SUDOBRAIN_SYNC_PROJECT_CONTEXT"),
+    ]:
+        add(key, label, _truthy_env(env_name, False) or bool(os.getenv(env_name)), f"{env_name} configured")
+
+    return {
+        "complete": all(c["ok"] for c in checks if c["key"] in {"backend", "postgres"}),
+        "checks": checks,
+        "config_path": str(CONFIG_PATH),
+    }
+
+
+class LocalConfigRequest(BaseModel):
+    values: dict = Field(default_factory=dict)
+
+
+@app.get("/config/status")
+def config_status():
+    """Return safe runtime/config fields for Settings and integration setup."""
+    local_config = _load_local_config()
+    env_names = [
+        "SUDOBRAIN_API_TOKEN", "SUDOBRAIN_TRUST_LOCALHOST", "SUDOBRAIN_DATA_DIR",
+        "SUDOBRAIN_LLM_PROVIDER", "SUDOBRAIN_LLM_MODEL", "SUDOBRAIN_LLM_COMMAND",
+        "SUDOBRAIN_SYNC_GMAIL", "SUDOBRAIN_SYNC_SLACK", "SUDOBRAIN_SYNC_FATHOM",
+        "SUDOBRAIN_SYNC_PROJECT_CONTEXT", "SUDOBRAIN_SLACK_INCLUDE_DMS",
+        "SUDOBRAIN_AUTO_SOURCE_SYNC", "SUDOBRAIN_SOURCE_SYNC_INTERVAL_MINUTES",
+        "GMAIL_CREDENTIALS_FILE", "GMAIL_TOKEN_FILE", "GCAL_TOKEN_FILE",
+        "SLACK_USER_TOKEN", "LINEAR_API_TOKEN", "FATHOM_API_TOKEN",
+        "SUDOBRAIN_PROJECTS_ROOT", "SUDOBRAIN_PROJECT_ALIASES_JSON",
+        "SUDOBRAIN_PERSON_ALIASES_JSON",
+    ]
+    values = {}
+    for name in env_names:
+        raw = local_config.get(name, os.getenv(name, ""))
+        secret = any(token in name for token in ["TOKEN", "PASSWORD", "SECRET", "CREDENTIAL"])
+        values[name] = {
+            "configured": bool(raw),
+            "value": "••••••••" if secret and raw else raw,
+            "secret": secret,
+            "source": "local_config" if name in local_config else "environment",
+        }
+    return {"values": values, "config_path": str(CONFIG_PATH)}
+
+
+@app.post("/config/save")
+def save_config(request: LocalConfigRequest):
+    """Save local app config outside the repository. Does not edit .env."""
+    allowed = set(config_status()["values"].keys())
+    incoming = {k: v for k, v in request.values.items() if k in allowed}
+    existing = _load_local_config()
+    for key, value in incoming.items():
+        if value is None or value == "":
+            existing.pop(key, None)
+        elif value != "••••••••":
+            existing[key] = value
+    _save_local_config(existing)
+    return {"status": "saved", "config_path": str(CONFIG_PATH), "keys": sorted(incoming.keys())}
+
+
+@app.get("/review/queue")
+def review_queue(limit: int = Query(default=50, ge=1, le=200)):
+    """Unified review queue for extracted knowledge."""
+    conn = db.get_connection()
+    items = []
+    try:
+        specs = [
+            ("task", "action_items", "text", "status = 'pending'"),
+            ("decision", "decisions", "text", "TRUE"),
+            ("promise", "promises", "description", "status = 'pending'"),
+            ("reminder", "reminders", "text", "status = 'pending'"),
+        ]
+        for kind, table, text_col, where in specs:
+            try:
+                rows = conn.execute(
+                    f"SELECT *, '{kind}' AS review_kind, {text_col} AS review_text FROM {table} WHERE {where} ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                items.extend(dict(r) for r in rows)
+            except Exception as e:
+                logger.debug("Review source skipped %s: %s", table, e)
+        items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+        return {"items": items[:limit], "total": len(items)}
+    finally:
+        conn.close()
+
+
+@app.post("/review/{kind}/{item_id}/accept")
+def accept_review_item(kind: str, item_id: int):
+    return {"status": "accepted", "kind": kind, "id": item_id}
+
+
+@app.post("/review/{kind}/{item_id}/dismiss")
+def dismiss_review_item(kind: str, item_id: int):
+    table_map = {"task": "action_items", "promise": "promises", "reminder": "reminders"}
+    table = table_map.get(kind)
+    if not table:
+        return {"status": "dismissed", "kind": kind, "id": item_id}
+    conn = db.get_connection()
+    try:
+        conn.execute(f"UPDATE {table} SET status = 'dismissed' WHERE id = ?", (item_id,))
+        conn.commit()
+        return {"status": "dismissed", "kind": kind, "id": item_id}
+    finally:
+        conn.close()
+
+
 @app.get("/people")
 def list_people():
     """List all people with their stats."""
@@ -998,6 +1168,105 @@ def list_promises():
         conn.close()
 
 
+class PromiseUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    promised_by_name: Optional[str] = None
+    promised_to_name: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+    note: Optional[str] = None
+
+
+def _record_promise_event(conn, promise_id: int, event_type: str, note: str = ""):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS promise_events (
+            id SERIAL PRIMARY KEY,
+            promise_id INTEGER,
+            event_type TEXT NOT NULL,
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "INSERT INTO promise_events (promise_id, event_type, note) VALUES (?, ?, ?)",
+        (promise_id, event_type, note),
+    )
+
+
+@app.patch("/promises/{promise_id}")
+def update_promise(promise_id: int, request: PromiseUpdateRequest):
+    fields = []
+    params = []
+    for key in ["status", "promised_by_name", "promised_to_name", "description", "due_date"]:
+        value = getattr(request, key)
+        if value is not None:
+            fields.append(f"{key} = ?")
+            params.append(value)
+    if not fields:
+        return {"status": "unchanged"}
+    params.append(promise_id)
+    conn = db.get_connection()
+    try:
+        result = conn.execute(f"UPDATE promises SET {', '.join(fields)} WHERE id = ?", tuple(params))
+        _record_promise_event(conn, promise_id, "updated", request.note or "")
+        conn.commit()
+        if result.rowcount <= 0:
+            raise HTTPException(status_code=404, detail="Promise not found")
+        return {"status": "updated"}
+    finally:
+        conn.close()
+
+
+@app.post("/promises/{promise_id}/{action}")
+def promise_action(promise_id: int, action: str, request: PromiseUpdateRequest = None):
+    allowed = {
+        "complete": "completed",
+        "remind": "pending",
+        "follow-up": "pending",
+        "dispute": "disputed",
+    }
+    if action not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported promise action")
+    note = request.note if request else ""
+    conn = db.get_connection()
+    try:
+        if action in {"complete", "dispute"}:
+            result = conn.execute("UPDATE promises SET status = ? WHERE id = ?", (allowed[action], promise_id))
+        elif action == "remind":
+            result = conn.execute(
+                "UPDATE promises SET reminder_count = COALESCE(reminder_count, 0) + 1 WHERE id = ?",
+                (promise_id,),
+            )
+        else:
+            result = conn.execute("SELECT id FROM promises WHERE id = ?", (promise_id,))
+        if result.rowcount <= 0 and action != "follow-up":
+            raise HTTPException(status_code=404, detail="Promise not found")
+        _record_promise_event(conn, promise_id, action, note or "")
+        conn.commit()
+        return {"status": action}
+    finally:
+        conn.close()
+
+
+@app.get("/promises/{promise_id}/history")
+def promise_history(promise_id: int):
+    conn = db.get_connection()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS promise_events (
+                id SERIAL PRIMARY KEY,
+                promise_id INTEGER,
+                event_type TEXT NOT NULL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        rows = conn.execute("SELECT * FROM promise_events WHERE promise_id = ? ORDER BY created_at DESC", (promise_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 class TranslateRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
     source_lang: str = "ta-IN"
@@ -1023,6 +1292,49 @@ def semantic_search_endpoint(query: str, limit: int = 10):
 def list_action_items(project: Optional[str] = None):
     """List pending action items, optionally filtered by project."""
     return db.get_pending_action_items(project)
+
+
+class TaskUpdateRequest(BaseModel):
+    text: Optional[str] = None
+    assignee: Optional[str] = None
+    due_date: Optional[str] = None
+    project: Optional[str] = None
+    status: Optional[str] = None
+
+
+@app.patch("/action-items/{task_id}")
+def update_action_item(task_id: int, request: TaskUpdateRequest):
+    fields = []
+    params = []
+    for key in ["text", "assignee", "due_date", "project", "status"]:
+        value = getattr(request, key)
+        if value is not None:
+            fields.append(f"{key} = ?")
+            params.append(value)
+    if not fields:
+        return {"status": "unchanged"}
+    params.append(task_id)
+    conn = db.get_connection()
+    try:
+        result = conn.execute(f"UPDATE action_items SET {', '.join(fields)} WHERE id = ?", tuple(params))
+        conn.commit()
+        if result.rowcount <= 0:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"status": "updated"}
+    finally:
+        conn.close()
+
+
+@app.post("/action-items/{task_id}/complete")
+def complete_action_item(task_id: int):
+    return update_action_item(task_id, TaskUpdateRequest(status="completed"))
+
+
+@app.post("/action-items/{task_id}/snooze")
+def snooze_action_item(task_id: int, days: int = Query(default=1, ge=1, le=365)):
+    from datetime import date, timedelta
+    due = (date.today() + timedelta(days=days)).isoformat()
+    return update_action_item(task_id, TaskUpdateRequest(due_date=due, status="pending"))
 
 
 # ── Chat Endpoint ──
@@ -1676,6 +1988,61 @@ def graph_orphaned():
     return find_orphaned_items()
 
 
+@app.get("/graph/canvas")
+def graph_canvas(limit: int = Query(default=80, ge=10, le=300), q: Optional[str] = None):
+    """Return a lightweight node-link graph for desktop visualization."""
+    conn = db.get_connection()
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+
+    def node(node_id: str, label: str, kind: str, **props):
+        nodes[node_id] = {"id": node_id, "label": label or node_id, "kind": kind, **props}
+        return node_id
+
+    def edge(source: str, target: str, kind: str, **props):
+        if source and target:
+            edges.append({"source": source, "target": target, "kind": kind, **props})
+
+    try:
+        term = f"%{q.lower()}%" if q else None
+        task_sql = "SELECT * FROM action_items WHERE status != 'dismissed'"
+        params: list = []
+        if term:
+            task_sql += " AND LOWER(text) LIKE ?"
+            params.append(term)
+        task_sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        for r in conn.execute(task_sql, tuple(params)).fetchall():
+            tid = node(f"task:{r['id']}", r["text"], "task", status=r.get("status"), due_date=r.get("due_date"))
+            if r.get("assignee"):
+                pid = node(f"person:{r['assignee'].lower()}", r["assignee"], "person")
+                edge(pid, tid, "assigned")
+            if r.get("project"):
+                prid = node(f"project:{r['project'].lower()}", r["project"], "project")
+                edge(tid, prid, "belongs_to")
+
+        for r in conn.execute("SELECT * FROM promises WHERE status != 'dismissed' ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall():
+            pid = node(f"promise:{r['id']}", r["description"], "promise", status=r.get("status"), due_date=r.get("due_date"))
+            if r.get("promised_by_name"):
+                by = node(f"person:{r['promised_by_name'].lower()}", r["promised_by_name"], "person")
+                edge(by, pid, "promised")
+            if r.get("promised_to_name"):
+                to = node(f"person:{r['promised_to_name'].lower()}", r["promised_to_name"], "person")
+                edge(pid, to, "to")
+
+        for r in conn.execute("SELECT * FROM decisions ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall():
+            did = node(f"decision:{r['id']}", r["text"], "decision", project=r.get("project"))
+            if r.get("project"):
+                prid = node(f"project:{r['project'].lower()}", r["project"], "project")
+                edge(did, prid, "belongs_to")
+            if r.get("made_by"):
+                person = node(f"person:{r['made_by'].lower()}", r["made_by"], "person")
+                edge(person, did, "made")
+    finally:
+        conn.close()
+    return {"nodes": list(nodes.values())[:limit], "edges": edges[:limit * 2], "total_nodes": len(nodes), "total_edges": len(edges)}
+
+
 # ── Document Ingestion Endpoint ──
 
 
@@ -1819,6 +2186,47 @@ def email_draft(recording_id: str):
     return draft_followup_email(recording_id)
 
 
+@app.get("/recordings/{recording_id}/rich")
+def rich_recording_detail(recording_id: str):
+    """Unified meeting detail: transcript, minutes, extracted items and follow-up draft."""
+    conn = db.get_connection()
+    try:
+        transcript_row = conn.execute(
+            "SELECT id, full_text, transcript_json FROM transcripts WHERE recording_id = ? LIMIT 1",
+            (recording_id,),
+        ).fetchone()
+        transcript_id = transcript_row["id"] if transcript_row else None
+        tasks = decisions = promises = []
+        if transcript_id:
+            tasks = [dict(r) for r in conn.execute("SELECT * FROM action_items WHERE transcript_id = ? ORDER BY created_at DESC", (transcript_id,)).fetchall()]
+            decisions = [dict(r) for r in conn.execute("SELECT * FROM decisions WHERE transcript_id = ? ORDER BY created_at DESC", (transcript_id,)).fetchall()]
+            promises = [dict(r) for r in conn.execute("SELECT * FROM promises WHERE transcript_id = ? ORDER BY created_at DESC", (transcript_id,)).fetchall()]
+    finally:
+        conn.close()
+
+    minutes = {}
+    draft = {}
+    try:
+        minutes = generate_minutes(recording_id)
+    except Exception as e:
+        minutes = {"error": str(e)}
+    try:
+        draft = email_draft(recording_id)
+    except Exception as e:
+        draft = {"error": str(e)}
+    return {
+        "recording_id": recording_id,
+        "transcript_id": transcript_id,
+        "transcript": json.loads(transcript_row["transcript_json"]) if transcript_row and transcript_row.get("transcript_json") else {},
+        "full_text": transcript_row["full_text"] if transcript_row else "",
+        "minutes": minutes,
+        "email_draft": draft,
+        "tasks": tasks,
+        "decisions": decisions,
+        "promises": promises,
+    }
+
+
 # ── Workflows (#11) ──
 
 @app.get("/workflows")
@@ -1851,6 +2259,46 @@ def delete_workflow(rule_id: int):
     from backend.intelligence.workflows import delete_rule
     delete_rule(rule_id)
     return {"status": "deleted"}
+
+
+class WorkflowUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    trigger_type: Optional[str] = None
+    action_type: Optional[str] = None
+    condition: Optional[dict] = None
+    action_params: Optional[dict] = None
+    enabled: Optional[bool] = None
+
+
+@app.patch("/workflows/{rule_id}")
+def update_workflow(rule_id: int, request: WorkflowUpdateRequest):
+    """Update a workflow rule, including enable/disable."""
+    from backend.intelligence.workflows import update_rule
+    if update_rule(rule_id, request.name, request.trigger_type, request.action_type,
+                   request.condition, request.action_params, request.enabled):
+        return {"status": "updated"}
+    raise HTTPException(status_code=404, detail="Workflow not found or unchanged")
+
+
+@app.post("/workflows/{rule_id}/toggle")
+def toggle_workflow(rule_id: int, enabled: bool = Query(...)):
+    from backend.intelligence.workflows import toggle_rule
+    if toggle_rule(rule_id, enabled):
+        return {"status": "updated", "enabled": enabled}
+    raise HTTPException(status_code=404, detail="Workflow not found")
+
+
+@app.post("/workflows/dry-run")
+def dry_run_workflow(request: WorkflowCreateRequest):
+    """Preview workflow matches without executing actions."""
+    from backend.intelligence.workflows import preview_rule
+    return preview_rule(trigger_type=request.trigger_type, condition=request.condition or {})
+
+
+@app.get("/workflows/{rule_id}/dry-run")
+def dry_run_saved_workflow(rule_id: int):
+    from backend.intelligence.workflows import preview_rule
+    return preview_rule(rule_id=rule_id)
 
 
 @app.post("/workflows/evaluate")
@@ -2584,6 +3032,47 @@ def run_unified_source_sync():
     """Run one read-only source sync pass for Gmail, Slack, and Fathom."""
     from backend.source_sync import run_source_sync_once
     return run_source_sync_once()
+
+
+@app.get("/sync/export")
+def export_sync_bundle():
+    """Export non-secret local knowledge for another desktop install."""
+    tables = [
+        "recordings", "transcripts", "action_items", "decisions", "promises",
+        "reminders", "projects", "ideas", "habits", "expenses", "workflow_rules",
+    ]
+    conn = db.get_connection()
+    bundle = {"version": 1, "exported_at": datetime.now(timezone.utc).isoformat(), "tables": {}}
+    try:
+        for table in tables:
+            try:
+                rows = conn.execute(f"SELECT * FROM {table} LIMIT 5000").fetchall()
+                bundle["tables"][table] = [dict(r) for r in rows]
+            except Exception as e:
+                bundle["tables"][table] = {"error": str(e)}
+    finally:
+        conn.close()
+    return bundle
+
+
+@app.post("/sync/import")
+async def import_sync_bundle(request: Request, dry_run: bool = True):
+    """Validate a sync bundle. Import is dry-run by default for safety."""
+    payload = await request.json()
+    tables = payload.get("tables", {}) if isinstance(payload, dict) else {}
+    summary = {
+        table: len(rows) if isinstance(rows, list) else 0
+        for table, rows in tables.items()
+    }
+    if dry_run:
+        return {"status": "validated", "dry_run": True, "summary": summary}
+    # The write path is intentionally conservative: only stores the received
+    # bundle under DATA_DIR for manual review instead of merging records blindly.
+    imports_dir = Path(DATA_DIR) / "imports"
+    imports_dir.mkdir(parents=True, exist_ok=True)
+    target = imports_dir / f"sync_bundle_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    target.write_text(json.dumps(payload, indent=2, default=str))
+    return {"status": "stored_for_review", "path": str(target), "summary": summary}
 
 
 @app.post("/projects/context/sync")

@@ -87,6 +87,44 @@ def toggle_rule(rule_id: int, enabled: bool) -> bool:
         conn.close()
 
 
+def update_rule(rule_id: int, name: str | None = None, trigger_type: str | None = None,
+                action_type: str | None = None, condition: dict | None = None,
+                action_params: dict | None = None, enabled: bool | None = None) -> bool:
+    """Update editable workflow fields."""
+    import json
+    updates = []
+    params = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if trigger_type is not None:
+        updates.append("trigger_type = ?")
+        params.append(trigger_type)
+    if action_type is not None:
+        updates.append("action_type = ?")
+        params.append(action_type)
+    if condition is not None:
+        updates.append("condition_json = ?")
+        params.append(json.dumps(condition))
+    if action_params is not None:
+        updates.append("action_params_json = ?")
+        params.append(json.dumps(action_params))
+    if enabled is not None:
+        updates.append("enabled = ?")
+        params.append(enabled)
+    if not updates:
+        return False
+
+    params.append(rule_id)
+    conn = get_connection()
+    try:
+        result = conn.execute(f"UPDATE workflow_rules SET {', '.join(updates)} WHERE id = ?", tuple(params))
+        conn.commit()
+        return result.rowcount > 0
+    finally:
+        conn.close()
+
+
 def delete_rule(rule_id: int) -> bool:
     conn = get_connection()
     try:
@@ -155,6 +193,27 @@ def evaluate_rules():
     if triggered:
         logger.info("Workflows: %d rules triggered", len(triggered))
     return triggered
+
+
+def preview_rule(rule_id: int | None = None, trigger_type: str | None = None,
+                 condition: dict | None = None, limit: int = 20) -> dict:
+    """Return matching trigger items without executing actions."""
+    import json
+    if rule_id is not None:
+        init_workflow_tables()
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT * FROM workflow_rules WHERE id = ?", (rule_id,)).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return {"matches": [], "count": 0}
+        trigger_type = row["trigger_type"]
+        condition = json.loads(row.get("condition_json") or "{}")
+    if not trigger_type:
+        return {"matches": [], "count": 0}
+    matches = _check_trigger(trigger_type, condition or {})
+    return {"trigger_type": trigger_type, "matches": matches[:limit], "count": len(matches)}
 
 
 def _check_trigger(trigger_type: str, condition: dict) -> list[dict]:

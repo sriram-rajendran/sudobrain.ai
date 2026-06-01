@@ -5,7 +5,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 320px;
+      width: 360px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #1a1a2e;
       color: #e0e0e0;
@@ -50,9 +50,10 @@
       display: flex;
       gap: 6px;
       margin-top: 8px;
+      flex-wrap: wrap;
     }
     button {
-      flex: 1;
+      flex: 1 1 80px;
       padding: 8px;
       border: none;
       border-radius: 6px;
@@ -64,7 +65,43 @@
     button:hover { opacity: 0.8; }
     .btn-task { background: #6C63FF; color: #fff; }
     .btn-idea { background: #9B59B6; color: #fff; }
+    .btn-decision { background: #2563eb; color: #fff; }
     .btn-capture { background: #333; color: #ccc; }
+    input {
+      width: 100%;
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 7px;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .source {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history {
+      margin-top: 12px;
+      border-top: 1px solid #333;
+      padding-top: 8px;
+    }
+    .history h2 {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .history-item {
+      font-size: 11px;
+      color: #aaa;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
     .result {
       font-size: 12px;
       color: #4ade80;
@@ -87,13 +124,22 @@
   </div>
 
   <div class="capture-area">
+    <div id="source" class="source">Current page metadata loading...</div>
     <textarea id="text" placeholder="Type or paste text to capture..."></textarea>
+    <input id="project" placeholder="Project tag (optional)" />
+    <input id="person" placeholder="Person tag / assignee (optional)" />
     <div class="buttons">
       <button class="btn-task" onclick="capture('todo')">Task</button>
       <button class="btn-idea" onclick="capture('idea')">Idea</button>
+      <button class="btn-decision" onclick="capture('decision')">Decision</button>
       <button class="btn-capture" onclick="capture('')">Capture</button>
     </div>
     <div id="result" class="result"></div>
+  </div>
+
+  <div class="history">
+    <h2>Recent captures</h2>
+    <div id="history"></div>
   </div>
 
   <div class="tip">

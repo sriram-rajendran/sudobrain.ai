@@ -8,6 +8,7 @@ struct GraphView: View {
     @State private var personNetwork: [String: Any] = [:]
     @State private var selectedProject: String? = nil
     @State private var projectGraph: [String: Any] = [:]
+    @State private var canvas: [String: Any] = [:]
     @State private var searchQuery = ""
     @State private var isLoading = true
 
@@ -135,6 +136,8 @@ struct GraphView: View {
                 if let counts = stats["counts"] as? [String: Any] {
                     nodeBreakdown(counts)
                 }
+
+                GraphCanvasPanel(canvas: canvas)
             }
             .padding(.horizontal, 20)
         }
@@ -381,6 +384,64 @@ struct GraphView: View {
         stats = (try? await APIClient.shared.getRawObject("/graph/status")) ?? [:]
         bottlenecks = (try? await APIClient.shared.getRaw("/graph/bottlenecks")) ?? []
         orphaned = (try? await APIClient.shared.getRawObject("/graph/orphaned")) ?? [:]
+        canvas = (try? await APIClient.shared.getRawObject("/graph/canvas?limit=80")) ?? [:]
         isLoading = false
+    }
+}
+
+struct GraphCanvasPanel: View {
+    let canvas: [String: Any]
+
+    var body: some View {
+        let nodes = canvas["nodes"] as? [[String: Any]] ?? []
+        let edges = canvas["edges"] as? [[String: Any]] ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Interactive Canvas")
+                .font(.system(size: 13, weight: .semibold))
+            ZStack {
+                ForEach(edges.prefix(80).indices, id: \.self) { i in
+                    let start = point(for: i, count: max(edges.count, 1), radius: 95)
+                    let end = point(for: i + 7, count: max(edges.count, 1), radius: 95)
+                    Path { path in
+                        path.move(to: start)
+                        path.addLine(to: end)
+                    }
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                }
+                ForEach(nodes.prefix(40).indices, id: \.self) { i in
+                    let n = nodes[i]
+                    VStack(spacing: 2) {
+                        Circle()
+                            .fill(color(kind: n["kind"] as? String ?? ""))
+                            .frame(width: 18, height: 18)
+                        Text(n["label"] as? String ?? "")
+                            .font(.system(size: 8))
+                            .lineLimit(1)
+                            .frame(width: 64)
+                    }
+                    .position(point(for: i, count: max(nodes.count, 1), radius: 105))
+                    .help(n["kind"] as? String ?? "")
+                }
+            }
+            .frame(height: 260)
+            .background(Color.secondary.opacity(0.06))
+            .cornerRadius(8)
+        }
+    }
+
+    private func point(for index: Int, count: Int, radius: CGFloat) -> CGPoint {
+        let angle = (Double(index) / Double(max(count, 1))) * Double.pi * 2
+        return CGPoint(x: 160 + cos(angle) * radius, y: 130 + sin(angle) * radius)
+    }
+
+    private func color(kind: String) -> Color {
+        switch kind {
+        case "person": return .blue
+        case "project": return .purple
+        case "task": return .orange
+        case "promise": return .green
+        case "decision": return .red
+        default: return .secondary
+        }
     }
 }

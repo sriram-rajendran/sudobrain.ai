@@ -1,6 +1,42 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct OnboardingView: View {
+    @State private var status: [String: Any] = [:]
+    @State private var checks: [[String: Any]] = []
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Onboarding", systemImage: "checklist") {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            List {
+                ForEach(checks.indices, id: \.self) { i in
+                    let check = checks[i]
+                    HStack(spacing: 10) {
+                        Image(systemName: (check["ok"] as? Bool ?? false) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor((check["ok"] as? Bool ?? false) ? .green : .secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(check["label"] as? String ?? "")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(check["detail"] as? String ?? "")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        status = (try? await APIClient.shared.getRawObject("/onboarding/status")) ?? [:]
+        checks = status["checks"] as? [[String: Any]] ?? []
+    }
+}
+
 struct SearchView: View {
     @State private var query = ""
     @State private var mode = "Smart"
@@ -151,6 +187,9 @@ struct SourceSyncView: View {
     var body: some View {
         VStack(spacing: 0) {
             header("Source Sync", systemImage: "arrow.triangle.2.circlepath") {
+                Button { Task { await exportBundle() } } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
                 Button { Task { await runSync() } } label: {
                     Label(isRunning ? "Running…" : "Run", systemImage: "play")
                 }
@@ -183,6 +222,154 @@ struct SourceSyncView: View {
         message = response["status"] as? String ?? "Sync finished"
         await load()
         isRunning = false
+    }
+
+    private func exportBundle() async {
+        let bundle = (try? await APIClient.shared.getRawObject("/sync/export")) ?? [:]
+        let count = (bundle["tables"] as? [String: Any])?.count ?? 0
+        message = "Prepared export bundle with \(count) table(s)"
+        status = bundle
+    }
+}
+
+struct KnowledgeReviewView: View {
+    @State private var items: [[String: Any]] = []
+    @State private var message = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Review Queue", systemImage: "checklist.checked") {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            if items.isEmpty {
+                emptyState(message.isEmpty ? "No extracted knowledge waiting for review" : message, icon: "checkmark.seal")
+            } else {
+                List {
+                    ForEach(items.indices, id: \.self) { i in
+                        let item = items[i]
+                        VStack(alignment: .leading, spacing: 8) {
+                            KeyValueCard(title: item["review_text"] as? String ?? "Review item", values: item)
+                            HStack {
+                                Button { Task { await review(item, action: "accept") } } label: {
+                                    Label("Accept", systemImage: "checkmark")
+                                }
+                                Button(role: .destructive) { Task { await review(item, action: "dismiss") } } label: {
+                                    Label("Dismiss", systemImage: "xmark")
+                                }
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        let result = (try? await APIClient.shared.getRawObject("/review/queue?limit=100")) ?? [:]
+        items = result["items"] as? [[String: Any]] ?? []
+    }
+
+    private func review(_ item: [String: Any], action: String) async {
+        guard let kind = item["review_kind"] as? String, let id = item["id"] as? Int else { return }
+        _ = try? await APIClient.shared.post("/review/\(kind)/\(id)/\(action)", body: [:])
+        message = "\(action.capitalized)ed \(kind)"
+        await load()
+    }
+}
+
+struct PromisesView: View {
+    @State private var promises: [[String: Any]] = []
+    @State private var message = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Promises", systemImage: "hand.raised") {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            if promises.isEmpty {
+                emptyState(message.isEmpty ? "No pending promises" : message, icon: "hand.thumbsup")
+            } else {
+                List {
+                    ForEach(promises.indices, id: \.self) { i in
+                        let p = promises[i]
+                        VStack(alignment: .leading, spacing: 8) {
+                            KeyValueCard(title: p["description"] as? String ?? "Promise", values: p)
+                            HStack {
+                                Button { Task { await act(p, "complete") } } label: { Label("Done", systemImage: "checkmark.circle") }
+                                Button { Task { await act(p, "remind") } } label: { Label("Remind", systemImage: "bell") }
+                                Button { Task { await act(p, "follow-up") } } label: { Label("Follow Up", systemImage: "arrowshape.turn.up.right") }
+                                Button(role: .destructive) { Task { await act(p, "dispute") } } label: { Label("Dispute", systemImage: "exclamationmark.triangle") }
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        promises = (try? await APIClient.shared.getRaw("/promises")) ?? []
+    }
+
+    private func act(_ promise: [String: Any], _ action: String) async {
+        guard let id = promise["id"] as? Int else { return }
+        _ = try? await APIClient.shared.post("/promises/\(id)/\(action)", body: ["note": "Updated from macOS app"])
+        message = "Promise \(action)"
+        await load()
+    }
+}
+
+struct CrossReferencesView: View {
+    @State private var refs: [[String: Any]] = []
+    @State private var recurring: [[String: Any]] = []
+    @State private var resolution = "Resolved from review"
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Contradictions", systemImage: "exclamationmark.triangle") {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            HStack {
+                TextField("Resolution note", text: $resolution)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(16)
+            List {
+                Section("Open Cross References") {
+                    ForEach(refs.indices, id: \.self) { i in
+                        let ref = refs[i]
+                        HStack {
+                            KeyValueCard(title: ref["description"] as? String ?? "Finding", values: ref)
+                            Button { Task { await resolve(ref["id"] as? Int) } } label: {
+                                Label("Resolve", systemImage: "checkmark")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                Section("Recurring Topics") {
+                    ForEach(recurring.indices, id: \.self) { i in
+                        KeyValueCard(title: recurring[i]["topic"] as? String ?? "Topic", values: recurring[i])
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        refs = (try? await APIClient.shared.getRaw("/cross-references")) ?? []
+        recurring = (try? await APIClient.shared.getRaw("/cross-references/recurring")) ?? []
+    }
+
+    private func resolve(_ id: Int?) async {
+        guard let id else { return }
+        _ = try? await APIClient.shared.post("/cross-references/\(id)/resolve", body: ["resolution": resolution])
+        await load()
     }
 }
 
@@ -330,8 +517,11 @@ struct WorkflowsView: View {
     @State private var name = ""
     @State private var trigger = "task_overdue"
     @State private var action = "flag_inbox"
+    @State private var conditionJSON = "{}"
+    @State private var actionJSON = "{}"
     @State private var isRunning = false
     @State private var message = ""
+    @State private var preview: [String: Any] = [:]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -354,10 +544,14 @@ struct WorkflowsView: View {
                         Text("Notify").tag("notify")
                         Text("Create reminder").tag("create_reminder")
                     }
+                    TextField("Condition JSON", text: $conditionJSON)
+                    TextField("Action JSON", text: $actionJSON)
                     Button { Task { await createRule() } } label: { Image(systemName: "plus") }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button { Task { await dryRunDraft() } } label: { Image(systemName: "testtube.2") }
                 }
                 if !message.isEmpty { Text(message).font(.caption).foregroundColor(.secondary) }
+                if !preview.isEmpty { KeyValueCard(title: "Dry Run", values: preview) }
             }
             .padding(16)
             Divider()
@@ -370,6 +564,18 @@ struct WorkflowsView: View {
                                 Task { await deleteRule(rules[i]["id"] as? Int) }
                             } label: {
                                 Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            Button {
+                                Task { await toggleRule(rules[i]) }
+                            } label: {
+                                Image(systemName: (rules[i]["enabled"] as? Bool ?? true) ? "pause.circle" : "play.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            Button {
+                                Task { await dryRunRule(rules[i]["id"] as? Int) }
+                            } label: {
+                                Image(systemName: "testtube.2")
                             }
                             .buttonStyle(.borderless)
                         }
@@ -391,12 +597,14 @@ struct WorkflowsView: View {
     }
 
     private func createRule() async {
+        let condition = parseJSON(conditionJSON)
+        let params = parseJSON(actionJSON)
         _ = try? await APIClient.shared.post("/workflows", body: [
             "name": name,
             "trigger_type": trigger,
             "action_type": action,
-            "condition": [:],
-            "action_params": [:],
+            "condition": condition,
+            "action_params": params,
         ])
         name = ""
         await load()
@@ -419,6 +627,36 @@ struct WorkflowsView: View {
         guard let id else { return }
         _ = try? await APIClient.shared.delete("/workflows/\(id)")
         await load()
+    }
+
+    private func toggleRule(_ rule: [String: Any]) async {
+        guard let id = rule["id"] as? Int else { return }
+        let enabled = !(rule["enabled"] as? Bool ?? true)
+        _ = try? await APIClient.shared.post("/workflows/\(id)/toggle?enabled=\(enabled)", body: [:])
+        await load()
+    }
+
+    private func dryRunDraft() async {
+        preview = (try? await APIClient.shared.post("/workflows/dry-run", body: [
+            "name": name.isEmpty ? "Preview" : name,
+            "trigger_type": trigger,
+            "action_type": action,
+            "condition": parseJSON(conditionJSON),
+            "action_params": parseJSON(actionJSON),
+        ])) ?? [:]
+    }
+
+    private func dryRunRule(_ id: Int?) async {
+        guard let id else { return }
+        preview = (try? await APIClient.shared.getRawObject("/workflows/\(id)/dry-run")) ?? [:]
+    }
+
+    private func parseJSON(_ raw: String) -> [String: Any] {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return object
     }
 }
 
@@ -512,6 +750,64 @@ struct HealthDataView: View {
         _ = try? await APIClient.shared.post("/health-data", body: ["data_type": type, "value": numeric])
         value = ""
         message = "Saved"
+        await load()
+    }
+}
+
+struct LocalSettingsView: View {
+    @State private var rows: [(String, String, Bool)] = []
+    @State private var values: [String: String] = [:]
+    @State private var message = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Settings", systemImage: "slider.horizontal.3") {
+                Button { Task { await save() } } label: { Label("Save", systemImage: "square.and.arrow.down") }
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            List {
+                Section("Runtime & Privacy") {
+                    ForEach(rows.indices, id: \.self) { i in
+                        let row = rows[i]
+                        HStack {
+                            Text(row.0)
+                                .font(.system(size: 11, weight: .medium))
+                                .frame(width: 260, alignment: .leading)
+                            if row.2 {
+                                SecureField(row.1, text: Binding(
+                                    get: { values[row.0] ?? row.1 },
+                                    set: { values[row.0] = $0 }
+                                ))
+                            } else {
+                                TextField(row.1, text: Binding(
+                                    get: { values[row.0] ?? row.1 },
+                                    set: { values[row.0] = $0 }
+                                ))
+                            }
+                        }
+                    }
+                }
+                if !message.isEmpty {
+                    Section { Text(message).font(.caption).foregroundColor(.secondary) }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        let status = (try? await APIClient.shared.getRawObject("/config/status")) ?? [:]
+        let dict = status["values"] as? [String: [String: Any]] ?? [:]
+        rows = dict.keys.sorted().map { key in
+            let item = dict[key] ?? [:]
+            return (key, item["value"] as? String ?? "", item["secret"] as? Bool ?? false)
+        }
+        values = Dictionary(uniqueKeysWithValues: rows.map { ($0.0, $0.1) })
+    }
+
+    private func save() async {
+        _ = try? await APIClient.shared.post("/config/save", body: ["values": values])
+        message = "Saved to local SudoBrain config"
         await load()
     }
 }

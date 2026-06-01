@@ -3,7 +3,7 @@
   "name": "SudoBrain Capture",
   "version": "1.0.0",
   "description": "Capture web content into SudoBrain — highlight text, right-click, save to your knowledge base.",
-  "permissions": ["contextMenus", "activeTab"],
+  "permissions": ["contextMenus", "activeTab", "storage"],
   "host_permissions": ["http://127.0.0.1:8420/*"],
   "background": {
     "service_worker": "background.js"
