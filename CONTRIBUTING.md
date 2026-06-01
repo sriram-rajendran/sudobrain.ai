@@ -27,12 +27,11 @@ uvicorn backend.main:app --reload
 ## Checks Before a Pull Request
 
 ```bash
-git diff --check
-python -m compileall -q backend
-curl http://127.0.0.1:8000/sync/audit
+make verify
 ```
 
-If local services are not available, say which checks were skipped and why.
+If local services are available, also include `/sync/audit` results. If any
+check is skipped, say which check was skipped and why.
 
 ## Pull Request Notes
 

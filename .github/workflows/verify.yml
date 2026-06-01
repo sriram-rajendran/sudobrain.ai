@@ -1,0 +1,22 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  public-repo:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: brew install gitleaks
+
+      - name: Verify public repo safety and builds
+        run: make verify

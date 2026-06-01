@@ -103,6 +103,18 @@ See [docs/setup.md](docs/setup.md) for full setup and safe config examples.
 services. It reports validation status, duplicates, ignored scopes, graph
 availability, stale graph nodes, and semantic quality issues.
 
+## Verification
+
+Run the same public-safety and build checks used by CI:
+
+```bash
+make verify
+```
+
+This checks for secrets, sensitive tracked files, private sample text,
+read-only integration boundaries, whitespace issues, Python compile health, and
+the macOS Swift build.
+
 ## Privacy Status
 
 SudoBrain can process sensitive communication data. Keep it private until you
