@@ -25,6 +25,18 @@ curl "http://127.0.0.1:8420/sources/catalog?category=engineering"
 curl "http://127.0.0.1:8420/sources/catalog?status=planned"
 ```
 
+Preview GitHub without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/github/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"repo":"owner/repo","limit":10}'
+```
+
+Use `SUDOBRAIN_GITHUB_TOKEN` or the request `token` field for private repos,
+discussion GraphQL access, or higher rate limits. Token values are never
+returned from preview health output.
+
 ## Source Families
 
 ### Engineering

@@ -2337,6 +2337,12 @@ class LocalMarkdownPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class GitHubPreviewRequest(BaseModel):
+    repo: str = Field(..., min_length=3, max_length=300, pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    token: Optional[str] = Field(None, max_length=500)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2426,6 +2432,13 @@ def extension_local_markdown_preview(request: LocalMarkdownPreviewRequest):
     """Preview the built-in local Markdown connector without ingesting data."""
     from backend.extensions.runtime import local_markdown_preview
     return local_markdown_preview(request.root, glob=request.glob, limit=request.limit)
+
+
+@app.post("/extensions/connectors/github/preview")
+def extension_github_preview(request: GitHubPreviewRequest):
+    """Preview the read-only GitHub connector without ingesting data."""
+    from backend.extensions.runtime import github_preview
+    return github_preview(request.repo, limit=request.limit, token=request.token)
 
 
 @app.post("/extensions/intelligence/keyword-risk/preview")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.connectors.catalog import list_source_connectors
+from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.plugins.registry import BUILTIN_PLUGINS, discover_plugins
@@ -16,7 +17,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown"],
+            "connectors": ["local_markdown", "github"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -40,6 +41,15 @@ def local_markdown_preview(root: str, glob: str = "**/*.md", limit: int = 25) ->
                 "preview": document.text[:500],
                 "metadata": document.metadata,
             })
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def github_preview(repo: str, limit: int = 25, token: str | None = None) -> dict:
+    connector = GitHubConnector(repo, token=token)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

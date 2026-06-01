@@ -3,6 +3,7 @@ import unittest
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
 from backend.connectors.catalog import connector_keys, list_source_connectors
+from backend.connectors.github import GitHubConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
 from backend.intelligence.sample_module import KeywordRiskModule
@@ -63,6 +64,105 @@ class ExtensionContractTests(unittest.TestCase):
         extensions = list_extensions()
         catalog = extensions["runtime"]["source_catalog"]
         self.assertIn("github", {item["key"] for item in catalog})
+        self.assertIn("github", extensions["runtime"]["connectors"])
+
+    def test_github_connector_normalizes_repository_activity(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/repos/acme/widgets"):
+                    return FakeResponse({"private": False, "default_branch": "main"})
+                if url.endswith("/issues"):
+                    return FakeResponse([
+                        {
+                            "number": 7,
+                            "title": "Fix onboarding",
+                            "body": "Users need a clearer setup path",
+                            "state": "open",
+                            "user": {"login": "maya"},
+                            "labels": [{"name": "bug"}],
+                            "html_url": "https://example.invalid/issues/7",
+                            "updated_at": "2026-01-01T00:00:00Z",
+                        },
+                        {
+                            "number": 8,
+                            "title": "Add capture",
+                            "body": "Adds mobile capture",
+                            "state": "closed",
+                            "user": {"login": "alex"},
+                            "pull_request": {},
+                            "labels": [],
+                            "html_url": "https://example.invalid/pull/8",
+                            "updated_at": "2026-01-02T00:00:00Z",
+                        },
+                    ])
+                if url.endswith("/pulls/8/reviews"):
+                    return FakeResponse([
+                        {
+                            "id": 99,
+                            "body": "Looks good after the privacy check.",
+                            "state": "APPROVED",
+                            "user": {"login": "sam"},
+                            "html_url": "https://example.invalid/pull/8#review",
+                            "submitted_at": "2026-01-02T01:00:00Z",
+                        }
+                    ])
+                if url.endswith("/releases"):
+                    return FakeResponse([])
+                if url.endswith("/commits"):
+                    return FakeResponse([
+                        {
+                            "sha": "abc123",
+                            "html_url": "https://example.invalid/commit/abc123",
+                            "commit": {
+                                "message": "feat: add setup",
+                                "author": {"name": "Maya", "date": "2026-01-03T00:00:00Z"},
+                            },
+                        }
+                    ])
+                if url.endswith("/actions/runs"):
+                    return FakeResponse({"workflow_runs": [
+                        {
+                            "id": 123,
+                            "name": "Verify",
+                            "status": "completed",
+                            "conclusion": "failure",
+                            "head_branch": "main",
+                            "head_sha": "abc123",
+                            "actor": {"login": "ci"},
+                            "html_url": "https://example.invalid/actions/runs/123",
+                            "updated_at": "2026-01-04T00:00:00Z",
+                        }
+                    ]})
+                return FakeResponse({})
+
+            def post(self, url, headers=None, json=None, timeout=30):
+                return FakeResponse({"skipped": "no discussions"})
+
+        connector = GitHubConnector("acme/widgets", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=10))
+        kinds = {doc.metadata["kind"] for doc in docs}
+        self.assertTrue({"issue", "pull_request", "pull_request_review", "commit", "ci_failure"}.issubset(kinds))
+
+    def test_github_health_redacts_token(self):
+        class FailingSession:
+            def get(self, *args, **kwargs):
+                raise RuntimeError("network unavailable")
+
+        connector = GitHubConnector("acme/widgets", token="secret", session=FailingSession())
+        health = connector.health()
+        self.assertTrue(health["token_configured"])
+        self.assertNotIn("secret", str(health))
 
 
 if __name__ == "__main__":

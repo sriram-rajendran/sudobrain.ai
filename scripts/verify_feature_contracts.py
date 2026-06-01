@@ -67,6 +67,7 @@ def main() -> None:
         '@app.get("/usage/analytics")',
         '@app.get("/observability/status")',
         '@app.get("/plugins")',
+        '@app.post("/extensions/connectors/github/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -148,6 +149,13 @@ def main() -> None:
         'key="terminal_activity"',
         'key="voice_notes"',
         'key="mobile_capture"',
+    ])
+    require_text("backend/connectors/github.py", [
+        "class GitHubConnector",
+        "pull_request_review",
+        "ci_failure",
+        "discussion",
+        "preview_documents",
     ])
     print("Feature contract checks passed.")
 

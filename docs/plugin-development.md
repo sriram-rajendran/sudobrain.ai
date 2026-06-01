@@ -42,6 +42,10 @@ curl http://127.0.0.1:8420/extensions
 curl -X POST http://127.0.0.1:8420/extensions/connectors/local-markdown/preview \
   -H 'Content-Type: application/json' \
   -d '{"root":"./docs","limit":5}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/github/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"repo":"owner/repo","limit":5}'
 ```
 
 Sample modules and actions can also be previewed without writes:
