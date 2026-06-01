@@ -2410,6 +2410,17 @@ def extension_runtime_registry():
     return list_extensions()
 
 
+@app.get("/sources/catalog")
+def source_connector_catalog(category: Optional[str] = None, status: Optional[str] = None):
+    """List source connector contracts for supported and planned integrations."""
+    from backend.connectors.catalog import connector_categories, list_source_connectors
+    return {
+        "sources": list_source_connectors(category=category, status=status),
+        "categories": connector_categories(),
+        "read_only_default": True,
+    }
+
+
 @app.post("/extensions/connectors/local-markdown/preview")
 def extension_local_markdown_preview(request: LocalMarkdownPreviewRequest):
     """Preview the built-in local Markdown connector without ingesting data."""
@@ -4471,7 +4482,8 @@ async def save_retention_policy(request: Request):
 def source_privacy_controls():
     """Return per-source privacy controls."""
     config = _load_local_config()
-    sources = ["slack", "gmail", "fathom", "linear", "calendar", "projects", "documents", "bookmarks"]
+    from backend.connectors.catalog import connector_keys
+    sources = sorted(connector_keys() | {"slack", "gmail", "fathom", "linear", "projects", "documents"})
     controls = {}
     for source in sources:
         prefix = f"SUDOBRAIN_PRIVACY_{source.upper()}"
@@ -4489,7 +4501,8 @@ async def save_source_privacy_controls(request: Request):
     """Save per-source privacy controls without deleting existing data."""
     payload = await request.json()
     config = _load_local_config()
-    allowed_sources = {"slack", "gmail", "fathom", "linear", "calendar", "projects", "documents", "bookmarks"}
+    from backend.connectors.catalog import connector_keys
+    allowed_sources = connector_keys() | {"slack", "gmail", "fathom", "linear", "projects", "documents"}
     allowed_keys = {"enabled": "ENABLED", "store_raw": "STORE_RAW", "extract_knowledge": "EXTRACT", "include_in_chat": "CHAT"}
     for source, controls in payload.get("sources", {}).items():
         if source not in allowed_sources or not isinstance(controls, dict):

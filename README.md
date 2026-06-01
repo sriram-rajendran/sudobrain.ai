@@ -24,7 +24,7 @@ It is designed for private deployments first. External integrations are
 read-only by default, sensitive generated data stays out of Git, and knowledge
 can be inspected, exported, audited, and pruned before it drives decisions.
 
-[Setup](docs/setup.md) | [Architecture](docs/architecture.md) | [Data Flow](docs/data-flow.md) | [Privacy](docs/privacy.md) | [Feature Matrix](docs/feature-matrix.md) | [MCP](docs/mcp.md) | [Model Providers](docs/model-providers.md) | [Screenshots](docs/screenshots.md) | [Roadmap](docs/roadmap.md)
+[Setup](docs/setup.md) | [Architecture](docs/architecture.md) | [Data Flow](docs/data-flow.md) | [Privacy](docs/privacy.md) | [Feature Matrix](docs/feature-matrix.md) | [Sources](docs/source-integrations.md) | [MCP](docs/mcp.md) | [Model Providers](docs/model-providers.md) | [Screenshots](docs/screenshots.md) | [Roadmap](docs/roadmap.md)
 
 Preferred setup: run the local bootstrap and demo path first. It creates a safe
 workspace with synthetic data, so you can try the product without connecting
@@ -153,6 +153,10 @@ Read [docs/privacy.md](docs/privacy.md) before enabling real sources.
   source-aware review.
 - **Read-only source sync** - Slack, Gmail, Fathom, Linear, Calendar, local
   repositories, documents, bookmarks, and web pages.
+- **Source integration catalog** - GitHub, Notion, Google Drive, Confluence,
+  Jira, Asana, Trello, ClickUp, Monday.com, Teams, Zoom, Meet, Outlook, IMAP,
+  CRM, support, incident, observability, Figma, read-later, local files,
+  terminal activity, and voice/mobile capture contracts.
 - **Trust controls** - source freshness, trust reports, retention previews,
   graph explanations, and knowledge provenance endpoints.
 - **Chat with citations** - local search context, streaming chat, saved

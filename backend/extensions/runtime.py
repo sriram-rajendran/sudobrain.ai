@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
+from backend.connectors.catalog import list_source_connectors
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.plugins.registry import BUILTIN_PLUGINS, discover_plugins
@@ -16,6 +17,7 @@ def list_extensions() -> dict:
         "external": registry.get("external", []),
         "runtime": {
             "connectors": ["local_markdown"],
+            "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
             "dynamic_external_execution": False,

@@ -2,8 +2,9 @@ import unittest
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
+from backend.connectors.catalog import connector_keys, list_source_connectors
 from backend.connectors.local_markdown import LocalMarkdownConnector
-from backend.extensions.runtime import keyword_risk_preview, workflow_action_preview
+from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.sdk import SourceDocument
 
@@ -41,6 +42,27 @@ class ExtensionContractTests(unittest.TestCase):
         action = workflow_action_preview({"title": "Review", "body": "Check risk"})
         self.assertTrue(action["dry_run"])
         self.assertTrue(action["requires_approval"])
+
+    def test_source_connector_catalog_covers_requested_sources(self):
+        expected = {
+            "github", "notion", "google_drive", "confluence", "jira", "asana",
+            "trello", "clickup", "monday", "microsoft_teams", "zoom",
+            "google_meet", "calendar", "outlook", "imap", "hubspot",
+            "salesforce", "pipedrive", "intercom", "zendesk", "freshdesk",
+            "help_scout", "pagerduty", "opsgenie", "incident_io", "rootly",
+            "datadog", "sentry", "grafana", "posthog", "amplitude", "figma",
+            "raindrop", "pocket", "browser_history", "bookmarks",
+            "local_files", "terminal_activity", "voice_notes", "mobile_capture",
+        }
+        self.assertTrue(expected.issubset(connector_keys()))
+        catalog = list_source_connectors()
+        self.assertGreaterEqual(len(catalog), len(expected))
+        self.assertTrue(all(item["access"] in {"read_only", "local_read_only", "local_capture"} for item in catalog))
+
+    def test_extensions_include_source_catalog(self):
+        extensions = list_extensions()
+        catalog = extensions["runtime"]["source_catalog"]
+        self.assertIn("github", {item["key"] for item in catalog})
 
 
 if __name__ == "__main__":

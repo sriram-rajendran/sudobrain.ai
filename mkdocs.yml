@@ -11,6 +11,7 @@ nav:
   - Data Flow: data-flow.md
   - Feature Matrix: feature-matrix.md
   - Plugin Development: plugin-development.md
+  - Source Integrations: source-integrations.md
   - MCP Server: mcp.md
   - Model Providers: model-providers.md
   - Roadmap: roadmap.md
