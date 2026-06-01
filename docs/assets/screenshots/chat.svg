@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f8fb"/>
+  <rect x="56" y="36" width="848" height="468" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <text x="88" y="84" font-family="Arial" font-size="28" font-weight="700" fill="#172033">Chat with citations</text>
+  <rect x="102" y="122" width="520" height="72" rx="12" fill="#eef1f6"/>
+  <text x="128" y="164" font-family="Arial" font-size="16" fill="#172033">What changed in Atlas Launch?</text>
+  <rect x="284" y="224" width="520" height="94" rx="12" fill="#2563eb"/>
+  <text x="310" y="262" font-family="Arial" font-size="16" fill="#ffffff">Atlas uses opt-in cloud providers and synthetic demo data.</text>
+  <rect x="306" y="336" width="460" height="52" rx="6" fill="#f6f8fb" stroke="#d9dde7"/>
+  <text x="326" y="368" font-family="Arial" font-size="14" fill="#475569">Transcript #demo-tr-atlas-kickoff</text>
+</svg>

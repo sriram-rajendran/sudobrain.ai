@@ -1,0 +1,15 @@
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: Share a use case, connector, workflow, or privacy improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Privacy and safety notes
+      description: Mention any private-data, write-action, or deployment implications.
+name: Ideas
+title: "[Idea] "

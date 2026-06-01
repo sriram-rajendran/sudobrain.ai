@@ -1,6 +1,7 @@
 # Screenshot And GIF Checklist
 
-The README still needs real screenshots before a polished public launch.
+The README includes synthetic public-safe SVG screenshots. Before a polished
+public launch, replace them with captured screenshots or GIFs from the demo app.
 
 Capture these views with synthetic demo data:
 

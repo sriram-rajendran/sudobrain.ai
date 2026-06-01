@@ -24,3 +24,4 @@
 - Added Slack, Gmail, Fathom, and Linear fixture-shape tests plus unsigned package script.
 - Added saved chat sessions, chat collections, provider switching, mobile capture, and chat-channel capture adapters.
 - Added workflow graph builder scaffold and per-source privacy controls.
+- Added docs/release workflows, release manifest, backend packaging spec, and public-safe README screenshots.

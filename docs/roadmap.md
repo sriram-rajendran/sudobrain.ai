@@ -61,6 +61,9 @@ decisions, promises, and project risk.
 - Observability status: started via `/observability/status`.
 - Fixture-based integration tests: shipped for Slack, Gmail, Fathom, and Linear fixture shapes.
 - Release process and changelog: started, with CI workflow, release notes template, and unsigned package script.
+- Docs hosting workflow: shipped via GitHub Pages workflow.
+- Release artifacts workflow: shipped as draft release workflow with unsigned artifacts and optional signing-secret hook.
+- README screenshots: synthetic public-safe screenshots shipped; captured GIFs still require running the app.
 
 ## Cross-Platform And Chat UX
 

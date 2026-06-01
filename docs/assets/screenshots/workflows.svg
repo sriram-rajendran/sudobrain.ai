@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f8fb"/>
+  <text x="64" y="72" font-family="Arial" font-size="28" font-weight="700" fill="#172033">Workflow Builder</text>
+  <g font-family="Arial" font-size="16" fill="#172033">
+    <rect x="92" y="150" width="190" height="86" rx="8" fill="#eef6ff" stroke="#bfdbfe"/>
+    <text x="132" y="200">Promise due soon</text>
+    <rect x="386" y="150" width="190" height="86" rx="8" fill="#f6f8fb" stroke="#d9dde7"/>
+    <text x="440" y="200">Rule</text>
+    <rect x="680" y="150" width="190" height="86" rx="8" fill="#ecfdf5" stroke="#bbf7d0"/>
+    <text x="742" y="200">Notify</text>
+  </g>
+  <path d="M282 193 H386 M576 193 H680" stroke="#64748b" stroke-width="4" fill="none"/>
+  <rect x="92" y="308" width="778" height="92" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <text x="122" y="360" font-family="Arial" font-size="18" fill="#172033">Approvals, trace history, templates, and dry-run preview</text>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f8fb"/>
+  <text x="64" y="72" font-family="Arial" font-size="28" font-weight="700" fill="#172033">Admin Dashboard</text>
+  <rect x="72" y="118" width="240" height="120" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <rect x="360" y="118" width="240" height="120" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <rect x="648" y="118" width="240" height="120" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <rect x="72" y="286" width="816" height="150" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <text x="112" y="184" font-family="Arial" font-size="18" fill="#172033">Usage</text>
+  <text x="400" y="184" font-family="Arial" font-size="18" fill="#172033">Audit log</text>
+  <text x="688" y="184" font-family="Arial" font-size="18" fill="#172033">Observability</text>
+  <text x="112" y="360" font-family="Arial" font-size="18" fill="#172033">Request logs and local-only telemetry</text>
+</svg>

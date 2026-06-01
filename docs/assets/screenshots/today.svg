@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f8fb"/>
+  <rect x="28" y="28" width="210" height="484" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <rect x="262" y="28" width="670" height="484" rx="8" fill="#ffffff" stroke="#d9dde7"/>
+  <text x="58" y="72" font-family="Arial" font-size="24" font-weight="700" fill="#172033">SudoBrain</text>
+  <text x="292" y="78" font-family="Arial" font-size="28" font-weight="700" fill="#172033">Today</text>
+  <rect x="292" y="112" width="590" height="72" rx="8" fill="#eef6ff"/>
+  <text x="316" y="156" font-family="Arial" font-size="18" fill="#172033">Morning briefing, pending promises, and critical tasks</text>
+  <rect x="292" y="214" width="280" height="112" rx="8" fill="#f6f8fb" stroke="#e1e5ee"/>
+  <rect x="602" y="214" width="280" height="112" rx="8" fill="#f6f8fb" stroke="#e1e5ee"/>
+  <rect x="292" y="356" width="590" height="92" rx="8" fill="#f6f8fb" stroke="#e1e5ee"/>
+</svg>

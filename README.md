@@ -116,6 +116,16 @@ you want after reading [docs/privacy.md](docs/privacy.md).
 Gmail-style messages, people, projects, tasks, decisions, and promises. Demo
 rows are prefixed with `demo-` and can be safely reloaded.
 
+## Screenshots
+
+Synthetic public-safe screenshots:
+
+- ![Today](docs/assets/screenshots/today.svg)
+- ![Chat with citations](docs/assets/screenshots/chat.svg)
+- ![Knowledge graph](docs/assets/screenshots/graph.svg)
+- ![Workflows](docs/assets/screenshots/workflows.svg)
+- ![Admin dashboard](docs/assets/screenshots/admin.svg)
+
 ## Trust And Portability
 
 - Chat responses include source metadata when local search can identify it.
