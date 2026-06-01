@@ -38,11 +38,11 @@ decisions, promises, and project risk.
 
 ## P3: Make SudoBrain Productive
 
-- Workflow templates: planned.
-- Scheduled agent runner: planned.
-- Agent run history and replay: planned.
-- Tool-call trace viewer: planned.
-- Approval steps before external writes: planned.
+- Workflow templates: started via `/workflows/templates`.
+- Scheduled agent runner: existing heartbeat evaluation, UI still planned.
+- Agent run history and replay: workflow history started, full replay planned.
+- Tool-call trace viewer: workflow trace backend and UI started.
+- Approval steps before external writes: approval queue scaffold started.
 - Report sharing/export: planned.
 
 ## P4: Make SudoBrain Community-Ready

@@ -37,6 +37,26 @@ def init_workflow_tables():
                 result TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS workflow_approvals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_id INTEGER,
+                rule_name TEXT,
+                action_type TEXT,
+                payload_json TEXT,
+                status TEXT DEFAULT 'pending',
+                decided_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS workflow_trace (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_id INTEGER,
+                rule_name TEXT,
+                step TEXT,
+                detail_json TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         conn.commit()
     finally:
@@ -151,6 +171,36 @@ def _log_trigger(rule_id: int, rule_name: str, trigger_type: str, action_type: s
         conn.close()
 
 
+def _log_trace(rule_id: int | None, rule_name: str, step: str, detail: dict):
+    import json
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO workflow_trace (rule_id, rule_name, step, detail_json) VALUES (?, ?, ?, ?)",
+            (rule_id, rule_name, step, json.dumps(detail, default=str)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _create_approval(rule_id: int, rule_name: str, action_type: str, payload: dict) -> str:
+    import json
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """INSERT INTO workflow_approvals (rule_id, rule_name, action_type, payload_json)
+            VALUES (?, ?, ?, ?)""",
+            (rule_id, rule_name, action_type, json.dumps(payload, default=str)),
+        )
+        conn.commit()
+        return f"approval_required:{row.lastrowid}"
+    finally:
+        conn.close()
+
+
 def evaluate_rules():
     """Evaluate all enabled rules. Called by heartbeat engine.
 
@@ -180,7 +230,12 @@ def evaluate_rules():
             continue
 
         for item in items:
-            result = _execute_action(action_type, action_params, item)
+            _log_trace(rule["id"], rule["name"], "trigger_matched", {"trigger": trigger_type, "item": item})
+            if action_params.get("requires_approval") or action_type in {"send_email", "external_write", "webhook"}:
+                result = _create_approval(rule["id"], rule["name"], action_type, {"params": action_params, "item": item})
+            else:
+                result = _execute_action(action_type, action_params, item)
+            _log_trace(rule["id"], rule["name"], "action_result", {"action": action_type, "result": result})
             _log_trigger(rule["id"], rule["name"], trigger_type, action_type, result)
             triggered.append({
                 "rule": rule["name"],
@@ -263,6 +318,30 @@ def _check_trigger(trigger_type: str, condition: dict) -> list[dict]:
             ).fetchall()
             return [dict(r) for r in rows]
 
+        elif trigger_type == "recording_processed":
+            rows = conn.execute(
+                """SELECT id, mode, created_at, status FROM recordings
+                WHERE status = 'completed' ORDER BY created_at DESC LIMIT 10"""
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+        elif trigger_type == "stale_decision":
+            days = condition.get("days_threshold", 30)
+            rows = conn.execute(
+                """SELECT id, text, made_by, project, created_at FROM decisions
+                WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '%s days'
+                ORDER BY created_at ASC LIMIT 20""" % int(days)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+        elif trigger_type == "project_risk":
+            rows = conn.execute(
+                """SELECT project, COUNT(*) AS pending_tasks FROM action_items
+                WHERE status = 'pending' AND project IS NOT NULL AND project != ''
+                GROUP BY project HAVING COUNT(*) >= 3 LIMIT 20"""
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     except Exception as e:
         logger.warning("Trigger check failed for %s: %s", trigger_type, e)
     finally:
@@ -308,6 +387,93 @@ def get_workflow_log(limit: int = 50) -> list[dict]:
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def get_workflow_trace(limit: int = 100) -> list[dict]:
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM workflow_trace ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def list_approvals(status: str = "pending", limit: int = 100) -> list[dict]:
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM workflow_approvals WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+            (status, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def decide_approval(approval_id: int, approved: bool) -> bool:
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        status = "approved" if approved else "rejected"
+        result = conn.execute(
+            "UPDATE workflow_approvals SET status = ?, decided_at = ? WHERE id = ? AND status = 'pending'",
+            (status, datetime.now().isoformat(), approval_id),
+        )
+        conn.commit()
+        return result.rowcount > 0
+    finally:
+        conn.close()
+
+
+def workflow_templates() -> list[dict]:
+    return [
+        {
+            "name": "Meeting follow-up",
+            "trigger_type": "recording_processed",
+            "action_type": "create_reminder",
+            "condition": {},
+            "action_params": {"text_template": "Review follow-ups from {item}"},
+        },
+        {
+            "name": "Promise reminder",
+            "trigger_type": "promise_due_soon",
+            "action_type": "notify",
+            "condition": {"days_before": 2},
+            "action_params": {"title": "Promise due soon", "priority": "important"},
+        },
+        {
+            "name": "Stale decision review",
+            "trigger_type": "stale_decision",
+            "action_type": "flag_inbox",
+            "condition": {"days_threshold": 30},
+            "action_params": {},
+        },
+        {
+            "name": "Project risk digest",
+            "trigger_type": "project_risk",
+            "action_type": "create_reminder",
+            "condition": {"risk_threshold": "medium"},
+            "action_params": {"text_template": "Review project risk digest: {item}"},
+        },
+        {
+            "name": "Relationship decay reminder",
+            "trigger_type": "no_interaction",
+            "action_type": "notify",
+            "condition": {"days_threshold": 30},
+            "action_params": {"title": "Reconnect reminder", "priority": "normal"},
+        },
+        {
+            "name": "External write with approval",
+            "trigger_type": "task_overdue",
+            "action_type": "webhook",
+            "condition": {},
+            "action_params": {"requires_approval": True},
+        },
+    ]
 
 
 def create_default_rules():

@@ -15,3 +15,4 @@
 - Added a lightweight SudoBrain MCP server scaffold and documentation.
 - Added safe model-provider configuration reporting for local, OpenAI-compatible, and opt-in cloud providers.
 - Added provenance, source freshness, graph export, retention preview, and chat feedback APIs.
+- Added workflow templates, approval queue, trace history, and app surfaces.

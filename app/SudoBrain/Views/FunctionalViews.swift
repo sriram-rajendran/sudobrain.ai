@@ -524,6 +524,9 @@ struct LinearView: View {
 struct WorkflowsView: View {
     @State private var rules: [[String: Any]] = []
     @State private var log: [[String: Any]] = []
+    @State private var templates: [[String: Any]] = []
+    @State private var approvals: [[String: Any]] = []
+    @State private var trace: [[String: Any]] = []
     @State private var name = ""
     @State private var trigger = "task_overdue"
     @State private var action = "flag_inbox"
@@ -548,11 +551,15 @@ struct WorkflowsView: View {
                         Text("Promise due soon").tag("promise_due_soon")
                         Text("No interaction").tag("no_interaction")
                         Text("Unassigned task").tag("unassigned_task")
+                        Text("Recording processed").tag("recording_processed")
+                        Text("Stale decision").tag("stale_decision")
+                        Text("Project risk").tag("project_risk")
                     }
                     Picker("Action", selection: $action) {
                         Text("Flag inbox").tag("flag_inbox")
                         Text("Notify").tag("notify")
                         Text("Create reminder").tag("create_reminder")
+                        Text("Webhook").tag("webhook")
                     }
                     TextField("Condition JSON", text: $conditionJSON)
                     TextField("Action JSON", text: $actionJSON)
@@ -591,9 +598,40 @@ struct WorkflowsView: View {
                         }
                     }
                 }
+                Section("Templates") {
+                    ForEach(templates.indices, id: \.self) { i in
+                        HStack {
+                            KeyValueCard(title: templates[i]["name"] as? String ?? "Template", values: templates[i])
+                            Button { applyTemplate(templates[i]) } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                Section("Approvals") {
+                    ForEach(approvals.indices, id: \.self) { i in
+                        HStack {
+                            KeyValueCard(title: approvals[i]["rule_name"] as? String ?? "Approval", values: approvals[i])
+                            Button { Task { await decideApproval(approvals[i]["id"] as? Int, approve: true) } } label: {
+                                Image(systemName: "checkmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            Button(role: .destructive) { Task { await decideApproval(approvals[i]["id"] as? Int, approve: false) } } label: {
+                                Image(systemName: "xmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
                 Section("Log") {
                     ForEach(log.indices, id: \.self) { i in
                         KeyValueCard(title: log[i]["rule_name"] as? String ?? "Run", values: log[i])
+                    }
+                }
+                Section("Trace") {
+                    ForEach(trace.indices, id: \.self) { i in
+                        KeyValueCard(title: trace[i]["step"] as? String ?? "Trace", values: trace[i])
                     }
                 }
             }
@@ -604,6 +642,9 @@ struct WorkflowsView: View {
     private func load() async {
         rules = (try? await APIClient.shared.getRaw("/workflows")) ?? []
         log = (try? await APIClient.shared.getRaw("/workflows/log?limit=50")) ?? []
+        templates = (try? await APIClient.shared.getRaw("/workflows/templates")) ?? []
+        approvals = (try? await APIClient.shared.getRaw("/workflows/approvals")) ?? []
+        trace = (try? await APIClient.shared.getRaw("/workflows/trace?limit=50")) ?? []
     }
 
     private func createRule() async {
@@ -659,6 +700,30 @@ struct WorkflowsView: View {
     private func dryRunRule(_ id: Int?) async {
         guard let id else { return }
         preview = (try? await APIClient.shared.getRawObject("/workflows/\(id)/dry-run")) ?? [:]
+    }
+
+    private func applyTemplate(_ template: [String: Any]) {
+        name = template["name"] as? String ?? ""
+        trigger = template["trigger_type"] as? String ?? trigger
+        action = template["action_type"] as? String ?? action
+        conditionJSON = jsonString(template["condition"] ?? [:])
+        actionJSON = jsonString(template["action_params"] ?? [:])
+    }
+
+    private func decideApproval(_ id: Int?, approve: Bool) async {
+        guard let id else { return }
+        let action = approve ? "approve" : "reject"
+        _ = try? await APIClient.shared.post("/workflows/approvals/\(id)/\(action)", body: [:])
+        await load()
+    }
+
+    private func jsonString(_ value: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return text
     }
 
     private func parseJSON(_ raw: String) -> [String: Any] {

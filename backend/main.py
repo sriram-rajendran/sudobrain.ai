@@ -2343,6 +2343,13 @@ def dry_run_saved_workflow(rule_id: int):
     return preview_rule(rule_id=rule_id)
 
 
+@app.get("/workflows/templates")
+def workflow_template_list():
+    """List reusable workflow templates."""
+    from backend.intelligence.workflows import workflow_templates
+    return workflow_templates()
+
+
 @app.post("/workflows/evaluate")
 def evaluate_workflows():
     """Manually trigger workflow evaluation."""
@@ -2355,6 +2362,36 @@ def workflow_log(limit: int = 50):
     """Get workflow execution history."""
     from backend.intelligence.workflows import get_workflow_log
     return get_workflow_log(min(limit, 200))
+
+
+@app.get("/workflows/trace")
+def workflow_trace(limit: int = 100):
+    """Get workflow tool-call and action trace history."""
+    from backend.intelligence.workflows import get_workflow_trace
+    return get_workflow_trace(min(limit, 500))
+
+
+@app.get("/workflows/approvals")
+def workflow_approvals(status: str = "pending", limit: int = 100):
+    """List workflow actions waiting for approval."""
+    from backend.intelligence.workflows import list_approvals
+    return list_approvals(status=status, limit=min(limit, 500))
+
+
+@app.post("/workflows/approvals/{approval_id}/approve")
+def approve_workflow_action(approval_id: int):
+    from backend.intelligence.workflows import decide_approval
+    if decide_approval(approval_id, True):
+        return {"status": "approved"}
+    raise HTTPException(status_code=404, detail="Approval not found")
+
+
+@app.post("/workflows/approvals/{approval_id}/reject")
+def reject_workflow_action(approval_id: int):
+    from backend.intelligence.workflows import decide_approval
+    if decide_approval(approval_id, False):
+        return {"status": "rejected"}
+    raise HTTPException(status_code=404, detail="Approval not found")
 
 
 @app.post("/workflows/defaults")
