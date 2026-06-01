@@ -19,3 +19,4 @@
 - Added document library, bookmark, folder watch, webpage summary, and OCR text handoff scaffolds.
 - Added sample intelligence module, sample workflow action, expanded MCP tools, and unit contract tests.
 - Added local admin dashboard, audit/request log, observability status, usage analytics, CI workflow, and release docs.
+- Added review queue filters, report export/share artifacts, plugin registry discovery, and MCP client status.

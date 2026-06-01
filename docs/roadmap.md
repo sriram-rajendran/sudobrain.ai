@@ -23,8 +23,8 @@ decisions, promises, and project risk.
 - Confidence scoring for stored knowledge: started through provenance responses.
 - Portable graph export: started via `/graph/export`.
 - Retention policy controls: started via `/privacy/retention`.
-- Review queue filters by source, type, confidence, project, and age: planned.
 - Source freshness dashboard: backend started via `/sources/freshness`.
+- Review queue filters by source, type, confidence, project, and age: shipped in `/review/queue`.
 
 ## P2: Make SudoBrain Extensible
 
@@ -35,7 +35,8 @@ decisions, promises, and project risk.
 - MCP server for SudoBrain knowledge: started in `scripts/sudobrain_mcp_server.py`.
 - Sample intelligence module: shipped in `backend/intelligence/sample_module.py`.
 - Sample workflow action: shipped in `backend/actions/sample_workflow_action.py`.
-- MCP client/tool support: planned.
+- MCP client/tool support: config/status scaffold started via `/mcp/client/status`.
+- Plugin registry: discovery scaffold started via `/plugins`.
 - Plugin developer documentation: shipped in `docs/plugin-development.md`.
 
 ## P3: Make SudoBrain Productive
@@ -45,14 +46,14 @@ decisions, promises, and project risk.
 - Agent run history and replay: workflow history started, full replay planned.
 - Tool-call trace viewer: workflow trace backend and UI started.
 - Approval steps before external writes: approval queue scaffold started.
-- Report sharing/export: planned.
+- Report sharing/export: local Markdown/JSON export and share artifacts shipped.
 
 ## P4: Make SudoBrain Community-Ready
 
 - Web/PWA companion: planned.
 - Provider settings UI: started through `/models/status` safe configuration reporting.
 - OpenAI-compatible, Anthropic, Gemini, OpenRouter, Groq, Bedrock, and LM Studio configuration: started in `.env.example` and `backend/ai/providers.py`.
-- Usage analytics: planned.
+- Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
 - Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
 - Observability status: started via `/observability/status`.

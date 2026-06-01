@@ -1113,7 +1113,14 @@ def save_config(request: LocalConfigRequest):
 
 
 @app.get("/review/queue")
-def review_queue(limit: int = Query(default=50, ge=1, le=200)):
+def review_queue(
+    limit: int = Query(default=50, ge=1, le=200),
+    kind: Optional[str] = None,
+    source: Optional[str] = None,
+    project: Optional[str] = None,
+    min_confidence: Optional[float] = Query(default=None, ge=0, le=1),
+    max_age_days: Optional[int] = Query(default=None, ge=1, le=3650),
+):
     """Unified review queue for extracted knowledge."""
     conn = db.get_connection()
     items = []
@@ -1130,11 +1137,49 @@ def review_queue(limit: int = Query(default=50, ge=1, le=200)):
                     f"SELECT *, '{kind}' AS review_kind, {text_col} AS review_text FROM {table} WHERE {where} ORDER BY created_at DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
-                items.extend(dict(r) for r in rows)
+                for row in rows:
+                    item = dict(row)
+                    item["confidence"] = _confidence_for_row(table, item)["score"]
+                    item["source"] = item.get("transcript_id") or item.get("recording_id") or table
+                    items.append(item)
             except Exception as e:
                 logger.debug("Review source skipped %s: %s", table, e)
+        if kind:
+            items = [item for item in items if item.get("review_kind") == kind]
+        if source:
+            needle = source.lower()
+            items = [item for item in items if needle in str(item.get("source", "")).lower()]
+        if project:
+            needle = project.lower()
+            items = [item for item in items if needle in str(item.get("project", "")).lower()]
+        if min_confidence is not None:
+            items = [item for item in items if float(item.get("confidence") or 0) >= min_confidence]
+        if max_age_days is not None:
+            cutoff = datetime.now(timezone.utc).timestamp() - (max_age_days * 86400)
+            filtered = []
+            for item in items:
+                raw = str(item.get("created_at") or "")
+                try:
+                    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    if parsed.timestamp() >= cutoff:
+                        filtered.append(item)
+                except Exception:
+                    filtered.append(item)
+            items = filtered
         items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
-        return {"items": items[:limit], "total": len(items)}
+        return {
+            "items": items[:limit],
+            "total": len(items),
+            "filters": {
+                "kind": kind,
+                "source": source,
+                "project": project,
+                "min_confidence": min_confidence,
+                "max_age_days": max_age_days,
+            },
+        }
     finally:
         conn.close()
 
@@ -1781,7 +1826,35 @@ def usage_analytics():
                 counts[table] = int(row["count"] if row else 0)
             except Exception:
                 counts[table] = 0
-        return {"local_only": True, "counts": counts, "generated_at": datetime.now(timezone.utc).isoformat()}
+        trends = {}
+        for table, column in [
+            ("recordings", "created_at"),
+            ("action_items", "created_at"),
+            ("decisions", "created_at"),
+            ("promises", "created_at"),
+            ("workflow_log", "created_at"),
+            ("chat_feedback", "created_at"),
+        ]:
+            try:
+                row = conn.execute(
+                    f"""SELECT
+                    COUNT(*) FILTER (WHERE {column} >= CURRENT_TIMESTAMP - INTERVAL '7 days') AS last_7_days,
+                    COUNT(*) FILTER (WHERE {column} >= CURRENT_TIMESTAMP - INTERVAL '30 days') AS last_30_days
+                    FROM {table}"""
+                ).fetchone()
+                trends[table] = dict(row) if row else {}
+            except Exception:
+                trends[table] = {}
+        return {
+            "local_only": True,
+            "counts": counts,
+            "trends": trends,
+            "quality": {
+                "feedback_items": counts.get("chat_feedback", 0),
+                "pending_reviews": len(review_queue(limit=200)["items"]),
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
     finally:
         conn.close()
 
@@ -1795,6 +1868,20 @@ def observability_status():
         "traces": {"workflow_trace": "/workflows/trace"},
         "opentelemetry": {"enabled": _truthy_env("SUDOBRAIN_OTEL_ENABLED", False), "env": "SUDOBRAIN_OTEL_ENABLED"},
     }
+
+
+@app.get("/plugins")
+def plugin_registry():
+    """List built-in and discovered plugin manifests."""
+    from backend.plugins.registry import discover_plugins
+    return discover_plugins()
+
+
+@app.get("/mcp/client/status")
+def mcp_client_status():
+    """Report configured external MCP servers without starting them."""
+    from backend.mcp_client import load_mcp_servers
+    return load_mcp_servers()
 
 
 # ── Fathom Integration Endpoints ──
@@ -2581,6 +2668,58 @@ def monthly_report():
     """Generate monthly intelligence report."""
     from backend.intelligence.reports import generate_monthly_report
     return generate_monthly_report()
+
+
+def _report_markdown(report: dict) -> str:
+    lines = [
+        f"# SudoBrain {str(report.get('period', '')) .title()} Report",
+        "",
+        f"Period: {report.get('start_date', '')} to {report.get('end_date', '')}",
+        "",
+        "## Summary",
+        "",
+        str(report.get("narrative", "")),
+        "",
+        "## Metrics",
+        "",
+    ]
+    for key in [
+        "meetings", "total_recording_hours", "decisions_made", "tasks_created",
+        "tasks_pending", "promises_made", "promises_kept", "promises_broken",
+        "promise_rate", "people_interacted",
+    ]:
+        lines.append(f"- {key.replace('_', ' ').title()}: {report.get(key, '')}")
+    lines.extend(["", "## Recent Decisions", ""])
+    for decision in report.get("recent_decisions", []):
+        lines.append(f"- {decision.get('text', '')} ({decision.get('project') or 'no project'})")
+    return "\n".join(lines).strip() + "\n"
+
+
+@app.get("/reports/{period}/export")
+def export_report(period: str, format: str = Query(default="markdown", pattern="^(json|markdown)$")):
+    """Export weekly or monthly report as JSON or Markdown."""
+    if period == "weekly":
+        report = weekly_report()
+    elif period == "monthly":
+        report = monthly_report()
+    else:
+        raise HTTPException(status_code=400, detail="period must be weekly or monthly")
+    if format == "json":
+        return report
+    return PlainTextResponse(_report_markdown(report), media_type="text/markdown")
+
+
+@app.post("/reports/{period}/share")
+def share_report(period: str):
+    """Create a local share artifact instead of publishing externally."""
+    if period not in {"weekly", "monthly"}:
+        raise HTTPException(status_code=400, detail="period must be weekly or monthly")
+    report = weekly_report() if period == "weekly" else monthly_report()
+    share_dir = Path(DATA_DIR) / "shared_reports"
+    share_dir.mkdir(parents=True, exist_ok=True)
+    target = share_dir / f"{period}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    target.write_text(_report_markdown(report))
+    return {"status": "stored", "path": str(target), "external_publish": False}
 
 
 # ── Sentiment Tracking (#13) ──
