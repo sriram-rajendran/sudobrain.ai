@@ -13,16 +13,66 @@
         <h1>Workflow Builder</h1>
         <p>Template-driven local workflow graph</p>
       </div>
-      <button id="refresh">Refresh</button>
+      <nav>
+        <button id="evaluate">Evaluate</button>
+        <button id="refresh">Refresh</button>
+      </nav>
     </header>
+
+    <section class="chat-panel">
+      <div class="row">
+        <input id="name" placeholder="Workflow name">
+        <select id="trigger" aria-label="Trigger">
+          <option value="task_overdue">Task overdue</option>
+          <option value="promise_due_soon">Promise due soon</option>
+          <option value="no_interaction">No interaction</option>
+          <option value="unassigned_task">Unassigned task</option>
+          <option value="recording_processed">Recording processed</option>
+          <option value="stale_decision">Stale decision</option>
+          <option value="project_risk">Project risk</option>
+        </select>
+        <select id="action" aria-label="Action">
+          <option value="flag_inbox">Flag inbox</option>
+          <option value="notify">Notify</option>
+          <option value="create_reminder">Create reminder</option>
+          <option value="webhook">Webhook approval</option>
+        </select>
+      </div>
+      <div class="row">
+        <textarea id="condition" aria-label="Condition JSON">{}</textarea>
+        <textarea id="params" aria-label="Action JSON">{}</textarea>
+      </div>
+      <div class="row">
+        <button id="dryRun">Dry Run</button>
+        <button id="create">Create</button>
+      </div>
+      <pre id="preview">Preview results appear here.</pre>
+    </section>
+
     <section class="grid">
       <article>
         <h2>Templates</h2>
-        <pre id="templates">Loading...</pre>
+        <div id="templates">Loading...</div>
       </article>
       <article>
         <h2>Graph</h2>
         <pre id="graph">Loading...</pre>
+      </article>
+      <article>
+        <h2>Rules</h2>
+        <pre id="rules">Loading...</pre>
+      </article>
+      <article>
+        <h2>Approvals</h2>
+        <pre id="approvals">Loading...</pre>
+      </article>
+      <article>
+        <h2>Trace</h2>
+        <pre id="trace">Loading...</pre>
+      </article>
+      <article>
+        <h2>Outbox</h2>
+        <pre id="outbox">Loading...</pre>
       </article>
     </section>
   </main>
@@ -33,19 +83,105 @@
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       return response.json();
     }
+    async function postJson(path, payload = {}) {
+      const response = await fetch(`${api}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return response.json();
+    }
     function render(id, value) {
       document.getElementById(id).textContent = JSON.stringify(value, null, 2);
     }
+    function parseField(id) {
+      try {
+        return JSON.parse(document.getElementById(id).value || "{}");
+      } catch (error) {
+        render("preview", { error: `${id}: ${error.message}` });
+        throw error;
+      }
+    }
+    function draftPayload() {
+      return {
+        name: document.getElementById("name").value.trim() || "Workflow",
+        trigger_type: document.getElementById("trigger").value,
+        action_type: document.getElementById("action").value,
+        condition: parseField("condition"),
+        action_params: parseField("params")
+      };
+    }
+    function applyTemplate(template) {
+      document.getElementById("name").value = template.name || "";
+      document.getElementById("trigger").value = template.trigger_type || "task_overdue";
+      document.getElementById("action").value = template.action_type || "flag_inbox";
+      document.getElementById("condition").value = JSON.stringify(template.condition || {}, null, 2);
+      document.getElementById("params").value = JSON.stringify(template.action_params || {}, null, 2);
+      dryRun();
+    }
+    function renderTemplates(templates) {
+      const target = document.getElementById("templates");
+      target.innerHTML = "";
+      templates.forEach(template => {
+        const row = document.createElement("div");
+        row.className = "row template-row";
+        const label = document.createElement("span");
+        label.textContent = template.name || "Template";
+        const button = document.createElement("button");
+        button.textContent = "Apply";
+        button.addEventListener("click", () => applyTemplate(template));
+        row.append(label, button);
+        target.append(row);
+      });
+      if (!templates.length) target.textContent = "No templates.";
+    }
     async function refresh() {
       try {
-        const graph = await getJson("/workflows/graph");
-        render("templates", graph.templates || []);
+        const [graph, rules, approvals, trace, outbox] = await Promise.all([
+          getJson("/workflows/graph"),
+          getJson("/workflows"),
+          getJson("/workflows/approvals"),
+          getJson("/workflows/trace?limit=50"),
+          getJson("/workflows/outbox?limit=50")
+        ]);
+        renderTemplates(graph.templates || []);
         render("graph", { nodes: graph.nodes, edges: graph.edges });
+        render("rules", rules);
+        render("approvals", approvals);
+        render("trace", trace);
+        render("outbox", outbox);
       } catch (error) {
         render("graph", { error: error.message });
       }
     }
+    async function dryRun() {
+      try {
+        render("preview", await postJson("/workflows/dry-run", draftPayload()));
+      } catch (error) {
+        render("preview", { error: error.message });
+      }
+    }
+    async function createWorkflow() {
+      try {
+        render("preview", await postJson("/workflows", draftPayload()));
+        await refresh();
+      } catch (error) {
+        render("preview", { error: error.message });
+      }
+    }
+    async function evaluate() {
+      try {
+        render("preview", await postJson("/workflows/evaluate"));
+        await refresh();
+      } catch (error) {
+        render("preview", { error: error.message });
+      }
+    }
     document.getElementById("refresh").addEventListener("click", refresh);
+    document.getElementById("dryRun").addEventListener("click", dryRun);
+    document.getElementById("create").addEventListener("click", createWorkflow);
+    document.getElementById("evaluate").addEventListener("click", evaluate);
     refresh();
   </script>
 </body>

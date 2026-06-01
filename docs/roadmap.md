@@ -45,12 +45,12 @@ decisions, promises, and project risk.
 
 ## P3: Make SudoBrain Productive
 
-- Workflow templates: started via `/workflows/templates`.
+- Workflow templates: shipped via `/workflows/templates`, macOS apply controls, and the web workflow builder.
 - Scheduled agent runner: shipped via `/scheduler/status`, `/heartbeat/trigger`, `/intelligence/run-now`, and the Admin scheduled agents panel.
 - Agent run history and replay: shipped via `/workflows/log`, `/workflows/log/{log_id}/replay`, and the macOS workflow view.
-- Tool-call trace viewer: workflow trace backend and UI started.
+- Tool-call trace viewer: shipped via `/workflows/trace`, macOS trace cards, and the web workflow builder.
 - Approval steps before external writes: shipped with approval queue, approve/reject controls, trace entries, and local outbox artifacts.
-- Visual/no-code workflow builder: started via `/workflows/graph` and `web-companion/workflow-builder.html`.
+- Visual/no-code workflow builder: shipped via `/workflows/graph`, template apply, dry-run, create, evaluate, trace, approvals, and outbox panels in `web-companion/workflow-builder.html`.
 - Report sharing/export: local Markdown/JSON export and share artifacts shipped.
 
 ## P4: Make SudoBrain Community-Ready

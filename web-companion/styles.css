@@ -104,6 +104,15 @@ pre {
   white-space: pre-wrap;
 }
 
+.template-row {
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  padding: 8px 0;
+}
+
+.template-row:last-child {
+  border-bottom: 0;
+}
+
 @media (max-width: 720px) {
   header,
   .toolbar,
