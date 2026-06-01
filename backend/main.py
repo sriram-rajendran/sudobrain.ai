@@ -2393,6 +2393,12 @@ class ClickUpPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class MondayPreviewRequest(BaseModel):
+    token: Optional[str] = Field(None, max_length=500)
+    board_ids: Optional[list[str] | str] = None
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2565,6 +2571,17 @@ def extension_clickup_preview(request: ClickUpPreviewRequest):
         token=request.token,
         team_id=request.team_id,
         list_id=request.list_id,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/monday/preview")
+def extension_monday_preview(request: MondayPreviewRequest):
+    """Preview the read-only Monday.com connector without ingesting data."""
+    from backend.extensions.runtime import monday_preview
+    return monday_preview(
+        token=request.token,
+        board_ids=request.board_ids,
         limit=request.limit,
     )
 

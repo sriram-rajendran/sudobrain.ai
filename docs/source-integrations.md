@@ -122,6 +122,18 @@ Use `SUDOBRAIN_CLICKUP_TOKEN` with optional `SUDOBRAIN_CLICKUP_TEAM_ID` or
 `SUDOBRAIN_CLICKUP_LIST_ID` to scope tasks, lists, spaces, assignees, tags, due
 dates, and priority.
 
+Preview Monday.com without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/monday/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"board_ids":["board-id"],"limit":10}'
+```
+
+Use `SUDOBRAIN_MONDAY_TOKEN` with optional `SUDOBRAIN_MONDAY_BOARD_IDS` to
+scope boards, items, updates, owners, assignment/status columns, and project
+status fields.
+
 ## Source Families
 
 ### Engineering

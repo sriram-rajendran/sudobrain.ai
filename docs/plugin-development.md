@@ -74,6 +74,10 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/trello/preview \
 curl -X POST http://127.0.0.1:8420/extensions/connectors/clickup/preview \
   -H 'Content-Type: application/json' \
   -d '{"list_id":"list-id","limit":5}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/monday/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"board_ids":["board-id"],"limit":5}'
 ```
 
 Sample modules and actions can also be previewed without writes:

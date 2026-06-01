@@ -75,6 +75,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/asana/preview")',
         '@app.post("/extensions/connectors/trello/preview")',
         '@app.post("/extensions/connectors/clickup/preview")',
+        '@app.post("/extensions/connectors/monday/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -211,6 +212,13 @@ def main() -> None:
         "SUDOBRAIN_CLICKUP_TOKEN",
         "/task",
         "assignees",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/monday.py", [
+        "class MondayConnector",
+        "SUDOBRAIN_MONDAY_TOKEN",
+        "items_page",
+        "column_values",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

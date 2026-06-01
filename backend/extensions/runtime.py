@@ -11,6 +11,7 @@ from backend.connectors.google_drive import GoogleDriveConnector, preview_docume
 from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.jira import JiraConnector, preview_documents as preview_jira_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
+from backend.connectors.monday import MondayConnector, preview_documents as preview_monday_documents
 from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
 from backend.connectors.trello import TrelloConnector, preview_documents as preview_trello_documents
 from backend.intelligence.sample_module import KeywordRiskModule
@@ -24,7 +25,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello", "clickup"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello", "clickup", "monday"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -161,6 +162,19 @@ def clickup_preview(
     documents = []
     if health.get("ok"):
         documents = preview_clickup_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def monday_preview(
+    token: str | None = None,
+    board_ids: str | list[str] | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = MondayConnector(token=token, board_ids=board_ids)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_monday_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

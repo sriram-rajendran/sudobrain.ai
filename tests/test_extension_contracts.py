@@ -10,6 +10,7 @@ from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
 from backend.connectors.jira import JiraConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
+from backend.connectors.monday import MondayConnector
 from backend.connectors.notion import NotionConnector
 from backend.connectors.trello import TrelloConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
@@ -79,6 +80,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("asana", extensions["runtime"]["connectors"])
         self.assertIn("trello", extensions["runtime"]["connectors"])
         self.assertIn("clickup", extensions["runtime"]["connectors"])
+        self.assertIn("monday", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -509,6 +511,49 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Resolve release blocker")
         self.assertIn("Fix failed smoke test", docs[0].text)
         self.assertEqual(docs[0].metadata["tags"], ["blocker"])
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_monday_connector_normalizes_items(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def post(self, url, headers=None, json=None, timeout=30):
+                query = json.get("query", "")
+                if " me " in query:
+                    return FakeResponse({"data": {"me": {"id": "user-1", "name": "Maya"}}})
+                return FakeResponse({"data": {"boards": [
+                    {
+                        "id": "board-1",
+                        "name": "Launch",
+                        "items_page": {"items": [
+                            {
+                                "id": "item-1",
+                                "name": "Ship release",
+                                "updated_at": "2026-01-04T00:00:00Z",
+                                "url": "https://example.invalid/monday/item-1",
+                                "column_values": [
+                                    {"id": "status", "text": "Working on it", "type": "status"},
+                                    {"id": "person", "text": "Maya", "type": "people"},
+                                ],
+                            }
+                        ]},
+                    }
+                ]}})
+
+        connector = MondayConnector(token="secret", board_ids=["board-1"], session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Ship release")
+        self.assertIn("Working on it", docs[0].text)
+        self.assertEqual(docs[0].metadata["board_name"], "Launch")
         self.assertNotIn("secret", str(connector.health()))
 
 
