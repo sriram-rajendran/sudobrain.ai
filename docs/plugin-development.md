@@ -50,6 +50,10 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/github/preview \
 curl -X POST http://127.0.0.1:8420/extensions/connectors/notion/preview \
   -H 'Content-Type: application/json' \
   -d '{"limit":5}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/google-drive/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"limit":5,"query":"trashed=false"}'
 ```
 
 Sample modules and actions can also be previewed without writes:

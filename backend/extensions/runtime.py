@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.connectors.catalog import list_source_connectors
+from backend.connectors.google_drive import GoogleDriveConnector, preview_documents as preview_drive_documents
 from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
@@ -18,7 +19,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -60,6 +61,15 @@ def notion_preview(limit: int = 25, token: str | None = None) -> dict:
     documents = []
     if health.get("ok"):
         documents = preview_notion_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def google_drive_preview(limit: int = 25, token: str | None = None, query: str | None = None) -> dict:
+    connector = GoogleDriveConnector(token=token, query=query)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_drive_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

@@ -3,6 +3,7 @@ import unittest
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
 from backend.connectors.catalog import connector_keys, list_source_connectors
+from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
 from backend.connectors.notion import NotionConnector
@@ -67,6 +68,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("github", {item["key"] for item in catalog})
         self.assertIn("github", extensions["runtime"]["connectors"])
         self.assertIn("notion", extensions["runtime"]["connectors"])
+        self.assertIn("google_drive", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -211,6 +213,54 @@ class ExtensionContractTests(unittest.TestCase):
         docs = list(connector.fetch(limit=5))
         self.assertEqual(docs[0].title, "Launch plan")
         self.assertIn("Status: Ready", docs[0].text)
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_google_drive_connector_normalizes_files(self):
+        class FakeResponse:
+            headers = {"content-type": "application/json"}
+
+            def __init__(self, payload, text=""):
+                self.payload = payload
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class TextResponse(FakeResponse):
+            headers = {"content-type": "text/plain"}
+
+            def json(self):
+                raise ValueError("not json")
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/about"):
+                    return FakeResponse({"user": {"emailAddress": "demo@example.invalid"}})
+                if url.endswith("/files"):
+                    return FakeResponse({"files": [
+                        {
+                            "id": "doc-1",
+                            "name": "Launch spec",
+                            "mimeType": "application/vnd.google-apps.document",
+                            "webViewLink": "https://example.invalid/doc-1",
+                            "modifiedTime": "2026-01-03T00:00:00Z",
+                            "createdTime": "2026-01-01T00:00:00Z",
+                            "owners": [{"displayName": "Maya"}],
+                        }
+                    ]})
+                if url.endswith("/files/doc-1/export"):
+                    return TextResponse({}, text="Decision log and launch plan")
+                return FakeResponse({})
+
+        connector = GoogleDriveConnector(token="secret", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Launch spec")
+        self.assertIn("Decision log", docs[0].text)
+        self.assertEqual(docs[0].metadata["kind"], "doc")
         self.assertNotIn("secret", str(connector.health()))
 
 

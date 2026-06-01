@@ -48,6 +48,18 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/notion/preview \
 Use `SUDOBRAIN_NOTION_TOKEN` or the request `token` field. The connector uses
 Notion search to normalize pages and databases into source documents.
 
+Preview Google Drive without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/google-drive/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"limit":10,"query":"trashed=false"}'
+```
+
+Use `SUDOBRAIN_GOOGLE_DRIVE_TOKEN` or the request `token` field. Google Docs,
+Sheets, and Slides are exported as text-friendly previews; binary files are
+listed as metadata-only source documents.
+
 ## Source Families
 
 ### Engineering
