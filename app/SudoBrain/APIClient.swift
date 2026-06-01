@@ -74,6 +74,62 @@ class APIClient {
         try await post(path, body: [:], timeout: timeout)
     }
 
+    func delete(_ path: String, timeout: TimeInterval = 30) async throws -> [String: Any] {
+        guard let request = makeRequest(path, method: "DELETE", timeout: timeout) else {
+            throw APIError.invalidURL
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validateResponse(response)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw APIError.decodingFailed
+        }
+        return result
+    }
+
+    func patch(_ path: String, body: [String: Any] = [:], timeout: TimeInterval = 30) async throws -> [String: Any] {
+        guard var request = makeRequest(path, method: "PATCH", timeout: timeout) else {
+            throw APIError.invalidURL
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !body.isEmpty {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validateResponse(response)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw APIError.decodingFailed
+        }
+        return result
+    }
+
+    func uploadFile(_ path: String, fileURL: URL, fieldName: String = "file", timeout: TimeInterval = 300) async throws -> [String: Any] {
+        guard var request = makeRequest(path, method: "POST", timeout: timeout) else {
+            throw APIError.invalidURL
+        }
+
+        let boundary = "SudoBrainBoundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        let filename = fileURL.lastPathComponent
+        let mimeType = mimeTypeFor(filename: filename)
+        let fileData = try Data(contentsOf: fileURL)
+
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validateResponse(response)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw APIError.decodingFailed
+        }
+        return result
+    }
+
     /// Check if the backend is reachable.
     func isReachable() async -> Bool {
         guard let request = makeRequest("/health", timeout: 3) else { return false }
@@ -101,6 +157,14 @@ class APIClient {
         default:
             throw APIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    private func mimeTypeFor(filename: String) -> String {
+        let lower = filename.lowercased()
+        if lower.hasSuffix(".pdf") { return "application/pdf" }
+        if lower.hasSuffix(".docx") { return "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
+        if lower.hasSuffix(".md") || lower.hasSuffix(".markdown") { return "text/markdown" }
+        return "text/plain"
     }
 
     enum APIError: LocalizedError {

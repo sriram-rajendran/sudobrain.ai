@@ -5,6 +5,8 @@ import SwiftUI
 struct HabitsView: View {
     @State private var habits: [[String: Any]] = []
     @State private var isLoading = true
+    @State private var newHabit = ""
+    @State private var message = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,10 +14,28 @@ struct HabitsView: View {
                 Text("Habits")
                     .font(.system(size: 22, weight: .bold))
                 Spacer()
+                TextField("New habit", text: $newHabit)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+                    .onSubmit { Task { await createHabit() } }
+                Button {
+                    Task { await createHabit() }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(newHabit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
             .padding(.bottom, 12)
+
+            if !message.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -54,6 +74,12 @@ struct HabitsView: View {
                                 Text("\(h["total_logged"] as? Int ?? 0) total")
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
+                                Button {
+                                    Task { await logHabit(h["id"] as? Int) }
+                                } label: {
+                                    Image(systemName: "checkmark")
+                                }
+                                .buttonStyle(.borderless)
                             }
                             .padding(12)
                             .background(.quaternary.opacity(0.3))
@@ -65,10 +91,30 @@ struct HabitsView: View {
             }
         }
         .task {
-            isLoading = true
-            habits = (try? await APIClient.shared.getRaw("/habits")) ?? []
-            isLoading = false
+            await loadHabits()
         }
+    }
+
+    private func loadHabits() async {
+        isLoading = true
+        habits = (try? await APIClient.shared.getRaw("/habits")) ?? []
+        isLoading = false
+    }
+
+    private func createHabit() async {
+        let name = newHabit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        _ = try? await APIClient.shared.post("/habits", body: ["name": name, "target": "daily"])
+        newHabit = ""
+        message = "Habit added"
+        await loadHabits()
+    }
+
+    private func logHabit(_ id: Int?) async {
+        guard let id else { return }
+        _ = try? await APIClient.shared.post("/habits/\(id)/log", body: ["completed": true])
+        message = "Logged for today"
+        await loadHabits()
     }
 }
 
@@ -78,6 +124,10 @@ struct ExpensesView: View {
     @State private var expenses: [[String: Any]] = []
     @State private var summary: [String: Any] = [:]
     @State private var isLoading = true
+    @State private var amount = ""
+    @State private var category = ""
+    @State private var desc = ""
+    @State private var message = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,6 +144,33 @@ struct ExpensesView: View {
             .padding(.horizontal, 24)
             .padding(.top, 20)
             .padding(.bottom, 12)
+
+            HStack(spacing: 8) {
+                TextField("Amount", text: $amount)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                TextField("Category", text: $category)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 140)
+                TextField("Description", text: $desc)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    Task { await addExpense() }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(Double(amount) == nil)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
+
+            if !message.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -142,13 +219,31 @@ struct ExpensesView: View {
             }
         }
         .task {
-            isLoading = true
-            async let e = APIClient.shared.getRaw("/expenses")
-            async let s = APIClient.shared.getRawObject("/expenses/summary")
-            expenses = (try? await e) ?? []
-            summary = (try? await s) ?? [:]
-            isLoading = false
+            await loadExpenses()
         }
+    }
+
+    private func loadExpenses() async {
+        isLoading = true
+        async let e = APIClient.shared.getRaw("/expenses")
+        async let s = APIClient.shared.getRawObject("/expenses/summary")
+        expenses = (try? await e) ?? []
+        summary = (try? await s) ?? [:]
+        isLoading = false
+    }
+
+    private func addExpense() async {
+        guard let numeric = Double(amount) else { return }
+        _ = try? await APIClient.shared.post("/expenses", body: [
+            "amount": numeric,
+            "category": category,
+            "description": desc,
+        ])
+        amount = ""
+        category = ""
+        desc = ""
+        message = "Expense added"
+        await loadExpenses()
     }
 }
 
@@ -157,6 +252,8 @@ struct ExpensesView: View {
 struct IdeasView: View {
     @State private var ideas: [[String: Any]] = []
     @State private var isLoading = true
+    @State private var newIdea = ""
+    @State private var message = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -171,6 +268,28 @@ struct IdeasView: View {
             .padding(.horizontal, 24)
             .padding(.top, 20)
             .padding(.bottom, 12)
+
+            HStack(spacing: 8) {
+                TextField("Capture an idea", text: $newIdea)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await addIdea() } }
+                Button {
+                    Task { await addIdea() }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(newIdea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
+
+            if !message.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -216,6 +335,12 @@ struct IdeasView: View {
                                             .font(.system(size: 10))
                                             .foregroundColor(.secondary)
                                     }
+                                    Button {
+                                        Task { await updateIdea(idea["id"] as? Int, status: "archived") }
+                                    } label: {
+                                        Image(systemName: "archivebox")
+                                    }
+                                    .buttonStyle(.borderless)
                                 }
                             }
                             .padding(10)
@@ -228,9 +353,29 @@ struct IdeasView: View {
             }
         }
         .task {
-            isLoading = true
-            ideas = (try? await APIClient.shared.getRaw("/ideas")) ?? []
-            isLoading = false
+            await loadIdeas()
         }
+    }
+
+    private func loadIdeas() async {
+        isLoading = true
+        ideas = (try? await APIClient.shared.getRaw("/ideas")) ?? []
+        isLoading = false
+    }
+
+    private func addIdea() async {
+        let text = newIdea.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        _ = try? await APIClient.shared.post("/ideas", body: ["text": text])
+        newIdea = ""
+        message = "Idea captured"
+        await loadIdeas()
+    }
+
+    private func updateIdea(_ id: Int?, status: String) async {
+        guard let id else { return }
+        _ = try? await APIClient.shared.patch("/ideas/\(id)?status=\(status)")
+        message = "Idea \(status)"
+        await loadIdeas()
     }
 }

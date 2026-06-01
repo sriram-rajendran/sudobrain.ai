@@ -87,6 +87,7 @@ struct DecisionsView: View {
 
 struct DecisionRow: View {
     let decision: [String: Any]
+    @State private var statusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -177,6 +178,37 @@ struct DecisionRow: View {
                             .font(.system(size: 10))
                             .foregroundColor(.secondary.opacity(0.6))
                     }
+
+                    if (decision["status"] as? String) != "evaluated" {
+                        HStack(spacing: 6) {
+                            Button {
+                                Task { await evaluate(outcome: "positive", wasCorrect: true) }
+                            } label: {
+                                Label("Correct", systemImage: "checkmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+
+                            Button {
+                                Task { await evaluate(outcome: "mixed", wasCorrect: nil) }
+                            } label: {
+                                Label("Mixed", systemImage: "circle.lefthalf.filled")
+                            }
+                            .buttonStyle(.borderless)
+
+                            Button {
+                                Task { await evaluate(outcome: "negative", wasCorrect: false) }
+                            } label: {
+                                Label("Wrong", systemImage: "xmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+
+                            if let statusMessage {
+                                Text(statusMessage)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -189,5 +221,19 @@ struct DecisionRow: View {
         if conf >= 8 { return .green }
         if conf >= 5 { return .blue }
         return .orange
+    }
+
+    private func evaluate(outcome: String, wasCorrect: Bool?) async {
+        guard let id = decision["id"] as? Int else { return }
+        var body: [String: Any] = ["outcome": outcome]
+        if let wasCorrect {
+            body["was_correct"] = wasCorrect
+        }
+        do {
+            _ = try await APIClient.shared.post("/decisions/\(id)/evaluate", body: body)
+            statusMessage = "Evaluated"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
     }
 }

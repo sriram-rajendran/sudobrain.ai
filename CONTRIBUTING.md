@@ -21,7 +21,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r backend/requirements.txt
 docker compose up -d postgres neo4j
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --host 127.0.0.1 --port 8420 --reload
 ```
 
 ## Checks Before a Pull Request

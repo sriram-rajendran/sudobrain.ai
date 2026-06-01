@@ -14,6 +14,10 @@ pip install -r backend/requirements.txt
 
 The example environment disables external sync by default.
 
+`SUDOBRAIN_API_TOKEN` is optional for single-user local development. If you set
+it and also want localhost clients to authenticate, set
+`SUDOBRAIN_TRUST_LOCALHOST=false`.
+
 ## 2. Local Services
 
 Start Postgres and Neo4j:
@@ -25,15 +29,15 @@ docker compose up -d postgres neo4j
 ## 3. Backend
 
 ```bash
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --host 127.0.0.1 --port 8420 --reload
 ```
 
 Verify:
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/graph/status
-curl http://127.0.0.1:8000/sync/audit
+curl http://127.0.0.1:8420/health
+curl http://127.0.0.1:8420/graph/status
+curl http://127.0.0.1:8420/sync/audit
 ```
 
 ## 4. No-Integration Mode

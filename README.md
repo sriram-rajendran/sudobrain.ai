@@ -53,15 +53,15 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r backend/requirements.txt
 docker compose up -d postgres neo4j
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --host 127.0.0.1 --port 8420 --reload
 ```
 
 Then check:
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/graph/status
-curl http://127.0.0.1:8000/sync/audit
+curl http://127.0.0.1:8420/health
+curl http://127.0.0.1:8420/graph/status
+curl http://127.0.0.1:8420/sync/audit
 ```
 
 The default `.env.example` disables external sync. Enable only the integrations

@@ -15,7 +15,7 @@ struct MainAppView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 recordButton
-                Button(action: {}) {
+                Button(action: { selectedSection = .search }) {
                     Image(systemName: "magnifyingglass")
                 }
                 .keyboardShortcut("k", modifiers: .command)
@@ -115,6 +115,8 @@ struct MainAppView: View {
         switch section {
         case .today:
             TodayView(recorder: recorder)
+        case .search:
+            SearchView()
         case .chat:
             ChatView()
         case .inbox:
@@ -129,10 +131,28 @@ struct MainAppView: View {
             DecisionsView()
         case .tasks:
             TasksView()
+        case .documents:
+            DocumentsView()
+        case .workflows:
+            WorkflowsView()
+        case .reports:
+            ReportsView()
+        case .sync:
+            SourceSyncView()
         case .slack:
             SlackView()
+        case .gmail:
+            GmailView()
+        case .calendar:
+            CalendarView()
+        case .linear:
+            LinearView()
         case .graph:
             GraphView()
+        case .models:
+            ModelsView()
+        case .health:
+            HealthDataView()
         case .habits:
             HabitsView()
         case .expenses:

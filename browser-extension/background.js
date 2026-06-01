@@ -37,7 +37,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       captureText = `idea: ${text}`;
       break;
     case "capture-decision":
-      captureText = `idea: [Decision] ${text}`;
+      captureText = `decision: ${text}`;
       break;
     case "capture-raw":
       captureText = text;
@@ -52,7 +52,7 @@ async function sendToSudoBrain(text, sourceUrl) {
     const response = await fetch(`${API_BASE}/capture`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text }),
+      body: JSON.stringify({ text: text, source_url: sourceUrl }),
     });
 
     if (response.ok) {

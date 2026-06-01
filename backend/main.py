@@ -39,6 +39,7 @@ app = FastAPI(title="SudoBrain", version="0.4.0")
 # ── Authentication Middleware ──
 
 API_TOKEN = os.getenv("SUDOBRAIN_API_TOKEN", "")
+TRUST_LOCALHOST = os.getenv("SUDOBRAIN_TRUST_LOCALHOST", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 # Paths that don't require authentication
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/fathom/webhook"}
@@ -57,9 +58,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if auth_header == f"Bearer {API_TOKEN}":
             return await call_next(request)
 
-        # Allow localhost without token for Swift app backward compatibility
+        # Allow localhost without token for Swift app/browser-extension compatibility.
         client_host = request.client.host if request.client else ""
-        if client_host in ("127.0.0.1", "::1", "localhost"):
+        if TRUST_LOCALHOST and client_host in ("127.0.0.1", "::1", "localhost"):
             return await call_next(request)
 
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
@@ -271,6 +272,7 @@ def insights_people():
 
 class CaptureRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000)
+    source_url: Optional[str] = Field(None, max_length=2000)
 
 @app.post("/capture")
 def quick_capture(request: CaptureRequest):
@@ -307,20 +309,56 @@ def quick_capture(request: CaptureRequest):
         _db_write("INSERT INTO action_items (transcript_id, text, status) VALUES (?, ?, 'pending')", ("manual", task_text))
         return {"type": "task", "text": task_text}
 
+    elif lower.startswith("decision:"):
+        decision_text = text.split(":", 1)[1].strip()
+        context = f"Captured from {request.source_url}" if request.source_url else "Manual quick capture"
+        try:
+            from backend.intelligence.decisions import save_decision_journal
+            decision_id = save_decision_journal(
+                transcript_id="manual",
+                text=decision_text,
+                reasoning=context,
+                confidence=5,
+                domain="work",
+                source="quick_capture",
+            )
+            _db_write(
+                "INSERT INTO decisions (transcript_id, text, context) VALUES (?, ?, ?)",
+                ("manual", decision_text, context),
+            )
+            return {"type": "decision", "id": decision_id, "text": decision_text}
+        except Exception as e:
+            logger.warning("Decision capture failed: %s", e)
+            _db_write(
+                "INSERT INTO decisions (transcript_id, text, context) VALUES (?, ?, ?)",
+                ("manual", decision_text, context),
+            )
+            return {"type": "decision", "text": decision_text}
+
     elif lower.startswith("idea:"):
         idea_text = text.split(":", 1)[1].strip()
+        from backend.life.manager import init_life_tables
+        init_life_tables()
         _db_write("INSERT INTO ideas (text, status) VALUES (?, 'parked')", (idea_text,))
         return {"type": "idea", "text": idea_text}
 
-    elif lower.startswith("spent:") or lower.startswith("expense:"):
-        parts = text.split(":", 1)[1].strip()
+    elif lower.startswith("spent:") or lower.startswith("expense:") or lower.startswith("spent "):
+        parts = text.split(":", 1)[1].strip() if ":" in text else text[6:].strip()
         match = re.match(r'(\d+)\s*(?:on\s+)?(.+)?', parts)
         if match:
             amount = float(match.group(1))
             desc = (match.group(2) or "").strip()
+            from backend.life.manager import init_life_tables
+            init_life_tables()
             _db_write("INSERT INTO expenses (amount, description, date) VALUES (?, ?, date('now'))", (amount, desc))
             return {"type": "expense", "amount": amount, "description": desc}
         return {"type": "expense", "error": "Could not parse amount"}
+
+    elif lower.startswith("habit:"):
+        habit_text = text.split(":", 1)[1].strip()
+        from backend.life.manager import create_habit
+        habit_id = create_habit(habit_text)
+        return {"type": "habit", "id": habit_id, "text": habit_text}
 
     elif lower.startswith("remind:") or lower.startswith("reminder:"):
         reminder_text = text.split(":", 1)[1].strip()
@@ -328,6 +366,8 @@ def quick_capture(request: CaptureRequest):
         return {"type": "reminder", "text": reminder_text}
 
     else:
+        from backend.life.manager import init_life_tables
+        init_life_tables()
         _db_write("INSERT INTO ideas (text, category, status) VALUES (?, 'uncategorized', 'parked')", (text,))
         return {"type": "idea", "text": text, "note": "Auto-classified as idea."}
 

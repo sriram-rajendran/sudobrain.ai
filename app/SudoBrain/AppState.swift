@@ -10,6 +10,7 @@ class AppState: ObservableObject {
 
     enum SidebarSection: String, CaseIterable, Identifiable {
         case today
+        case search
         case chat
         case inbox
         case intelligence
@@ -19,10 +20,19 @@ class AppState: ObservableObject {
         case people
         case decisions
         case tasks
+        case documents
+        case workflows
+        case reports
 
         // Integrations
+        case sync
         case slack
+        case gmail
+        case calendar
+        case linear
         case graph
+        case models
+        case health
 
         // Personal
         case habits
@@ -34,6 +44,7 @@ class AppState: ObservableObject {
         var label: String {
             switch self {
             case .today: return "Today"
+            case .search: return "Search"
             case .chat: return "Chat"
             case .inbox: return "Inbox"
             case .intelligence: return "Intelligence"
@@ -41,8 +52,17 @@ class AppState: ObservableObject {
             case .people: return "People"
             case .decisions: return "Decisions"
             case .tasks: return "Tasks"
+            case .documents: return "Documents"
+            case .workflows: return "Workflows"
+            case .reports: return "Reports"
+            case .sync: return "Source Sync"
             case .slack: return "Slack"
+            case .gmail: return "Gmail"
+            case .calendar: return "Calendar"
+            case .linear: return "Linear"
             case .graph: return "Knowledge Graph"
+            case .models: return "Models"
+            case .health: return "Health"
             case .habits: return "Habits"
             case .expenses: return "Expenses"
             case .ideas: return "Ideas"
@@ -52,6 +72,7 @@ class AppState: ObservableObject {
         var icon: String {
             switch self {
             case .today: return "calendar.badge.clock"
+            case .search: return "magnifyingglass"
             case .chat: return "bubble.left.and.bubble.right"
             case .inbox: return "tray"
             case .intelligence: return "brain"
@@ -59,8 +80,17 @@ class AppState: ObservableObject {
             case .people: return "person.circle"
             case .decisions: return "arrow.triangle.branch"
             case .tasks: return "checkmark.circle"
+            case .documents: return "doc.text"
+            case .workflows: return "point.3.connected.trianglepath.dotted"
+            case .reports: return "chart.line.uptrend.xyaxis"
+            case .sync: return "arrow.triangle.2.circlepath"
             case .slack: return "message.badge"
+            case .gmail: return "envelope"
+            case .calendar: return "calendar"
+            case .linear: return "list.bullet.rectangle"
             case .graph: return "network"
+            case .models: return "cpu"
+            case .health: return "heart"
             case .habits: return "chart.bar"
             case .expenses: return "indianrupeesign.circle"
             case .ideas: return "lightbulb"
@@ -69,9 +99,9 @@ class AppState: ObservableObject {
 
         var group: SidebarGroup {
             switch self {
-            case .today, .chat, .inbox, .intelligence: return .main
-            case .meetings, .people, .decisions, .tasks: return .knowledge
-            case .slack, .graph: return .integrations
+            case .today, .search, .chat, .inbox, .intelligence: return .main
+            case .meetings, .people, .decisions, .tasks, .documents, .workflows, .reports: return .knowledge
+            case .sync, .slack, .gmail, .calendar, .linear, .graph, .models, .health: return .integrations
             case .habits, .expenses, .ideas: return .personal
             }
         }
