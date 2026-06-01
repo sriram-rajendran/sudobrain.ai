@@ -134,6 +134,19 @@ Use `SUDOBRAIN_MONDAY_TOKEN` with optional `SUDOBRAIN_MONDAY_BOARD_IDS` to
 scope boards, items, updates, owners, assignment/status columns, and project
 status fields.
 
+Preview Microsoft Teams without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/microsoft-teams/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"team_id":"team-id","channel_id":"channel-id","limit":10}'
+```
+
+Use `SUDOBRAIN_TEAMS_TOKEN` with optional `SUDOBRAIN_TEAMS_TEAM_ID`,
+`SUDOBRAIN_TEAMS_CHANNEL_ID`, or `SUDOBRAIN_TEAMS_CHAT_ID` to preview channel
+messages, chat messages, meeting metadata, attendees, links, and file
+attachments through Microsoft Graph.
+
 ## Source Families
 
 ### Engineering

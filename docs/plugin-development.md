@@ -78,6 +78,10 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/clickup/preview \
 curl -X POST http://127.0.0.1:8420/extensions/connectors/monday/preview \
   -H 'Content-Type: application/json' \
   -d '{"board_ids":["board-id"],"limit":5}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/microsoft-teams/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"team_id":"team-id","channel_id":"channel-id","limit":5}'
 ```
 
 Sample modules and actions can also be previewed without writes:

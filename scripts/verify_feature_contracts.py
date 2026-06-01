@@ -76,6 +76,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/trello/preview")',
         '@app.post("/extensions/connectors/clickup/preview")',
         '@app.post("/extensions/connectors/monday/preview")',
+        '@app.post("/extensions/connectors/microsoft-teams/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -219,6 +220,13 @@ def main() -> None:
         "SUDOBRAIN_MONDAY_TOKEN",
         "items_page",
         "column_values",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/microsoft_teams.py", [
+        "class MicrosoftTeamsConnector",
+        "SUDOBRAIN_TEAMS_TOKEN",
+        "/messages",
+        "/me/events",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

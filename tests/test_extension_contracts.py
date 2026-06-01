@@ -10,6 +10,7 @@ from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
 from backend.connectors.jira import JiraConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
+from backend.connectors.microsoft_teams import MicrosoftTeamsConnector
 from backend.connectors.monday import MondayConnector
 from backend.connectors.notion import NotionConnector
 from backend.connectors.trello import TrelloConnector
@@ -81,6 +82,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("trello", extensions["runtime"]["connectors"])
         self.assertIn("clickup", extensions["runtime"]["connectors"])
         self.assertIn("monday", extensions["runtime"]["connectors"])
+        self.assertIn("microsoft_teams", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -554,6 +556,64 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Ship release")
         self.assertIn("Working on it", docs[0].text)
         self.assertEqual(docs[0].metadata["board_name"], "Launch")
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_microsoft_teams_connector_normalizes_messages_and_meetings(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/me"):
+                    return FakeResponse({"userPrincipalName": "maya@example.invalid"})
+                if url.endswith("/teams/team-1/channels/channel-1/messages"):
+                    return FakeResponse({"value": [
+                        {
+                            "id": "msg-1",
+                            "body": {"content": "<p>Launch standup action item.</p>"},
+                            "from": {"user": {"displayName": "Maya"}},
+                            "createdDateTime": "2026-01-01T00:00:00Z",
+                            "lastModifiedDateTime": "2026-01-01T00:05:00Z",
+                            "webUrl": "https://example.invalid/teams/msg-1",
+                            "attachments": [{"id": "att-1", "name": "plan.docx", "contentType": "file"}],
+                        }
+                    ]})
+                if url.endswith("/me/events"):
+                    return FakeResponse({"value": [
+                        {
+                            "id": "event-1",
+                            "subject": "Launch review",
+                            "body": {"content": "<p>Review action items.</p>"},
+                            "start": {"dateTime": "2026-01-02T00:00:00Z"},
+                            "end": {"dateTime": "2026-01-02T01:00:00Z"},
+                            "lastModifiedDateTime": "2026-01-02T02:00:00Z",
+                            "organizer": {"emailAddress": {"name": "Alex"}},
+                            "attendees": [{"emailAddress": {"name": "Maya"}}],
+                            "onlineMeeting": {"joinUrl": "https://example.invalid/meet"},
+                            "webLink": "https://example.invalid/event-1",
+                        }
+                    ]})
+                return FakeResponse({"value": []})
+
+        connector = MicrosoftTeamsConnector(
+            token="secret",
+            team_id="team-1",
+            channel_id="channel-1",
+            session=FakeSession(),
+        )
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        kinds = {doc.metadata["kind"] for doc in docs}
+        self.assertIn("channel_message", kinds)
+        self.assertIn("meeting", kinds)
+        self.assertIn("Launch standup", docs[0].text)
         self.assertNotIn("secret", str(connector.health()))
 
 

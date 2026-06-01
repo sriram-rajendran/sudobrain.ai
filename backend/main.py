@@ -2399,6 +2399,14 @@ class MondayPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class MicrosoftTeamsPreviewRequest(BaseModel):
+    token: Optional[str] = Field(None, max_length=2000)
+    team_id: Optional[str] = Field(None, max_length=200)
+    channel_id: Optional[str] = Field(None, max_length=300)
+    chat_id: Optional[str] = Field(None, max_length=300)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2582,6 +2590,19 @@ def extension_monday_preview(request: MondayPreviewRequest):
     return monday_preview(
         token=request.token,
         board_ids=request.board_ids,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/microsoft-teams/preview")
+def extension_microsoft_teams_preview(request: MicrosoftTeamsPreviewRequest):
+    """Preview the read-only Microsoft Teams connector without ingesting data."""
+    from backend.extensions.runtime import microsoft_teams_preview
+    return microsoft_teams_preview(
+        token=request.token,
+        team_id=request.team_id,
+        channel_id=request.channel_id,
+        chat_id=request.chat_id,
         limit=request.limit,
     )
 
