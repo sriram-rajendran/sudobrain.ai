@@ -2346,6 +2346,12 @@ class WorkflowActionPreviewRequest(BaseModel):
     payload: dict = Field(default_factory=dict)
 
 
+class MCPToolPreviewRequest(BaseModel):
+    server: str = "sudobrain"
+    name: str = Field(..., min_length=1, max_length=200)
+    arguments: dict = Field(default_factory=dict)
+
+
 @app.get("/security/secrets/status")
 def local_secrets_status():
     """Return encrypted local secret-store status without secret values."""
@@ -2430,6 +2436,20 @@ def mcp_client_status():
     """Report configured external MCP servers without starting them."""
     from backend.mcp_client import load_mcp_servers
     return load_mcp_servers()
+
+
+@app.get("/mcp/client/tools")
+def mcp_client_tools():
+    """List built-in and configured MCP tools without starting external servers."""
+    from backend.mcp_client import list_mcp_tools
+    return list_mcp_tools()
+
+
+@app.post("/mcp/client/tools/preview")
+def mcp_client_tool_preview(request: MCPToolPreviewRequest):
+    """Preview an MCP tool call without executing it."""
+    from backend.mcp_client import preview_tool_call
+    return preview_tool_call(request.name, request.arguments, server=request.server)
 
 
 # ── Fathom Integration Endpoints ──

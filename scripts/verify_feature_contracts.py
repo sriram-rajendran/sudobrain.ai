@@ -66,6 +66,8 @@ def main() -> None:
         '@app.get("/observability/status")',
         '@app.get("/plugins")',
         '@app.get("/mcp/client/status")',
+        '@app.get("/mcp/client/tools")',
+        '@app.post("/mcp/client/tools/preview")',
         '@app.get("/reports/{period}/export")',
         '@app.post("/reports/{period}/share")',
         '@app.get("/models/providers/health")',
