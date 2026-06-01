@@ -181,6 +181,7 @@ struct DocumentsView: View {
 struct SourceSyncView: View {
     @State private var status: [String: Any] = [:]
     @State private var audit: [String: Any] = [:]
+    @State private var freshness: [[String: Any]] = []
     @State private var isRunning = false
     @State private var message = ""
 
@@ -203,6 +204,13 @@ struct SourceSyncView: View {
                     if !message.isEmpty { Text(message).font(.caption).foregroundColor(.secondary) }
                     KeyValueCard(title: "Status", values: status)
                     KeyValueCard(title: "Audit", values: audit)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Source Freshness")
+                            .font(.system(size: 13, weight: .semibold))
+                        ForEach(freshness.indices, id: \.self) { i in
+                            KeyValueCard(title: freshness[i]["source"] as? String ?? "Source", values: freshness[i])
+                        }
+                    }
                 }
                 .padding(16)
             }
@@ -213,6 +221,8 @@ struct SourceSyncView: View {
     private func load() async {
         status = (try? await APIClient.shared.getRawObject("/sync/status")) ?? [:]
         audit = (try? await APIClient.shared.getRawObject("/sync/audit")) ?? [:]
+        let fresh = (try? await APIClient.shared.getRawObject("/sources/freshness")) ?? [:]
+        freshness = fresh["sources"] as? [[String: Any]] ?? []
     }
 
     private func runSync() async {
@@ -688,6 +698,7 @@ struct ReportsView: View {
 
 struct ModelsView: View {
     @State private var status: [String: Any] = [:]
+    @State private var providerRows: [[String: Any]] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -701,13 +712,32 @@ struct ModelsView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
             }
-            ScrollView { KeyValueCard(title: "Runtime Models", values: status).padding(16) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    KeyValueCard(title: "Runtime Models", values: status)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Provider Configuration")
+                            .font(.system(size: 13, weight: .semibold))
+                        ForEach(providerRows.indices, id: \.self) { i in
+                            KeyValueCard(title: providerRows[i]["label"] as? String ?? "Provider", values: providerRows[i])
+                        }
+                    }
+                }
+                .padding(16)
+            }
         }
         .task { await load() }
     }
 
     private func load() async {
         status = (try? await APIClient.shared.getRawObject("/models/status")) ?? [:]
+        let config = status["provider_config"] as? [String: Any] ?? [:]
+        let providers = config["providers"] as? [String: [String: Any]] ?? [:]
+        providerRows = providers.keys.sorted().map { key in
+            var row = providers[key] ?? [:]
+            row["provider"] = key
+            return row
+        }
     }
 }
 
@@ -757,6 +787,8 @@ struct HealthDataView: View {
 struct LocalSettingsView: View {
     @State private var rows: [(String, String, Bool)] = []
     @State private var values: [String: String] = [:]
+    @State private var retention: [String: Any] = [:]
+    @State private var retentionPreview: [String: Any] = [:]
     @State private var message = ""
 
     var body: some View {
@@ -787,6 +819,15 @@ struct LocalSettingsView: View {
                         }
                     }
                 }
+                Section("Retention Preview") {
+                    KeyValueCard(title: "Policy", values: retention)
+                    KeyValueCard(title: "Dry Run", values: retentionPreview)
+                    Button {
+                        Task { await loadRetention() }
+                    } label: {
+                        Label("Refresh Retention Preview", systemImage: "arrow.clockwise")
+                    }
+                }
                 if !message.isEmpty {
                     Section { Text(message).font(.caption).foregroundColor(.secondary) }
                 }
@@ -803,12 +844,18 @@ struct LocalSettingsView: View {
             return (key, item["value"] as? String ?? "", item["secret"] as? Bool ?? false)
         }
         values = Dictionary(uniqueKeysWithValues: rows.map { ($0.0, $0.1) })
+        await loadRetention()
     }
 
     private func save() async {
         _ = try? await APIClient.shared.post("/config/save", body: ["values": values])
         message = "Saved to local SudoBrain config"
         await load()
+    }
+
+    private func loadRetention() async {
+        retention = (try? await APIClient.shared.getRawObject("/privacy/retention")) ?? [:]
+        retentionPreview = (try? await APIClient.shared.getRawObject("/privacy/retention/preview")) ?? [:]
     }
 }
 

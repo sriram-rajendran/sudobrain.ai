@@ -13,7 +13,9 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(messages) { msg in
-                            MessageBubble(message: msg)
+                            MessageBubble(message: msg) { rating in
+                                Task { await sendFeedback(for: msg, rating: rating) }
+                            }
                                 .id(msg.id)
                         }
                     }
@@ -127,6 +129,24 @@ struct ChatView: View {
             }
         }.resume()
     }
+
+    private func sendFeedback(for message: ChatMessage, rating: String) async {
+        guard message.role == .brain else { return }
+        let sourcePayload = message.sources.map { source in
+            [
+                "source": source.source,
+                "date": source.date,
+                "table": source.table,
+                "source_id": source.sourceId,
+                "excerpt": source.excerpt,
+            ]
+        }
+        _ = try? await APIClient.shared.post("/chat/feedback", body: [
+            "answer": message.text,
+            "rating": rating,
+            "sources": sourcePayload,
+        ])
+    }
 }
 
 struct ChatSource: Identifiable {
@@ -159,6 +179,7 @@ struct ChatMessage: Identifiable {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    let onFeedback: (String) -> Void
 
     var body: some View {
         HStack {
@@ -185,6 +206,23 @@ struct MessageBubble: View {
                                 CitationCard(source: source)
                             }
                         }
+                    }
+
+                    if message.role == .brain && !message.text.contains("Searching") && !message.text.contains("Reasoning") {
+                        HStack(spacing: 8) {
+                            Button { onFeedback("helpful") } label: {
+                                Image(systemName: "hand.thumbsup")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Mark answer helpful")
+                            Button { onFeedback("not_helpful") } label: {
+                                Image(systemName: "hand.thumbsdown")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Mark answer not helpful")
+                        }
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
                     }
                 }
             }
