@@ -1714,6 +1714,89 @@ def resume_system(request: SystemControlRequest = None):
     return status
 
 
+# ── Local Admin / Observability ──
+
+@app.get("/admin/dashboard")
+def admin_dashboard():
+    """Local admin/debug dashboard summary."""
+    return {
+        "health": health(),
+        "sync": unified_sync_status(),
+        "freshness": source_freshness(),
+        "retention": retention_policy(),
+        "models": models_status(),
+    }
+
+
+@app.get("/admin/audit-log")
+def admin_audit_log(limit: int = 100):
+    """Return local audit events from workflow and feedback tables."""
+    conn = db.get_connection()
+    events = []
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT id, rule_name, action_type, result, created_at FROM workflow_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            events.extend({"type": "workflow", **dict(row)} for row in rows)
+        except Exception:
+            pass
+        try:
+            rows = conn.execute(
+                "SELECT id, rating, comment, created_at FROM chat_feedback ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            events.extend({"type": "chat_feedback", **dict(row)} for row in rows)
+        except Exception:
+            pass
+        return sorted(events, key=lambda item: str(item.get("created_at", "")), reverse=True)[:limit]
+    finally:
+        conn.close()
+
+
+@app.get("/admin/request-log")
+def admin_request_log(limit: int = 100):
+    """Return recent local backend log lines for debugging."""
+    log_path = Path(LOG_DIR) / "sudobrain.log"
+    if not log_path.exists():
+        return {"path": str(log_path), "lines": []}
+    lines = log_path.read_text(errors="replace").splitlines()[-limit:]
+    return {"path": str(log_path), "lines": lines}
+
+
+@app.get("/usage/analytics")
+def usage_analytics():
+    """Local usage counts without sending telemetry."""
+    conn = db.get_connection()
+    try:
+        counts = {}
+        for table in [
+            "recordings", "transcripts", "action_items", "decisions", "promises",
+            "people", "projects", "workflow_rules", "workflow_log", "chat_feedback",
+            "document_library", "bookmarks",
+        ]:
+            try:
+                row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
+                counts[table] = int(row["count"] if row else 0)
+            except Exception:
+                counts[table] = 0
+        return {"local_only": True, "counts": counts, "generated_at": datetime.now(timezone.utc).isoformat()}
+    finally:
+        conn.close()
+
+
+@app.get("/observability/status")
+def observability_status():
+    """Report local observability capabilities."""
+    return {
+        "logs": {"enabled": True, "path": str(Path(LOG_DIR) / "sudobrain.log")},
+        "metrics": {"usage_analytics": "/usage/analytics"},
+        "traces": {"workflow_trace": "/workflows/trace"},
+        "opentelemetry": {"enabled": _truthy_env("SUDOBRAIN_OTEL_ENABLED", False), "env": "SUDOBRAIN_OTEL_ENABLED"},
+    }
+
+
 # ── Fathom Integration Endpoints ──
 
 

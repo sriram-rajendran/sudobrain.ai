@@ -924,6 +924,53 @@ struct LocalSettingsView: View {
     }
 }
 
+struct AdminDebugView: View {
+    @State private var dashboard: [String: Any] = [:]
+    @State private var observability: [String: Any] = [:]
+    @State private var usage: [String: Any] = [:]
+    @State private var audit: [[String: Any]] = []
+    @State private var requestLog: [String] = []
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header("Admin", systemImage: "gauge.with.dots.needle.67percent") {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+            }
+            List {
+                Section("Dashboard") {
+                    KeyValueCard(title: "Local Status", values: dashboard)
+                }
+                Section("Observability") {
+                    KeyValueCard(title: "Capabilities", values: observability)
+                    KeyValueCard(title: "Usage", values: usage)
+                }
+                Section("Audit Log") {
+                    ForEach(audit.indices, id: \.self) { i in
+                        KeyValueCard(title: audit[i]["type"] as? String ?? "Event", values: audit[i])
+                    }
+                }
+                Section("Request Log") {
+                    ForEach(requestLog.indices, id: \.self) { i in
+                        Text(requestLog[i])
+                            .font(.system(size: 10, design: .monospaced))
+                            .lineLimit(3)
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        dashboard = (try? await APIClient.shared.getRawObject("/admin/dashboard")) ?? [:]
+        observability = (try? await APIClient.shared.getRawObject("/observability/status")) ?? [:]
+        usage = (try? await APIClient.shared.getRawObject("/usage/analytics")) ?? [:]
+        audit = (try? await APIClient.shared.getRaw("/admin/audit-log?limit=50")) ?? []
+        let logs = (try? await APIClient.shared.getRawObject("/admin/request-log?limit=50")) ?? [:]
+        requestLog = logs["lines"] as? [String] ?? []
+    }
+}
+
 struct SmartSearchResultView: View {
     let result: [String: Any]
 

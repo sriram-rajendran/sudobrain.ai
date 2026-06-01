@@ -161,6 +161,8 @@ struct MainAppView: View {
             ModelsView()
         case .health:
             HealthDataView()
+        case .admin:
+            AdminDebugView()
         case .localSettings:
             LocalSettingsView()
         case .habits:

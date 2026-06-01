@@ -54,6 +54,10 @@ def main() -> None:
         '@app.post("/bookmarks")',
         '@app.post("/webpage/summarize")',
         '@app.post("/ocr/extract")',
+        '@app.get("/admin/dashboard")',
+        '@app.get("/admin/audit-log")',
+        '@app.get("/usage/analytics")',
+        '@app.get("/observability/status")',
     ])
     require_text("app/SudoBrain/AppState.swift", [
         "case onboarding",
@@ -61,6 +65,7 @@ def main() -> None:
         "case promises",
         "case crossReferences",
         "case localSettings",
+        "case admin",
     ])
     require_text("app/SudoBrain/Views/FunctionalViews.swift", [
         "struct OnboardingView",
@@ -68,6 +73,7 @@ def main() -> None:
         "struct PromisesView",
         "struct CrossReferencesView",
         "struct LocalSettingsView",
+        "struct AdminDebugView",
         "/workflows/dry-run",
         "/sync/export",
     ])

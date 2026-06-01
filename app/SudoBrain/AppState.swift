@@ -37,6 +37,7 @@ class AppState: ObservableObject {
         case graph
         case models
         case health
+        case admin
         case localSettings
 
         // Personal
@@ -72,6 +73,7 @@ class AppState: ObservableObject {
             case .graph: return "Knowledge Graph"
             case .models: return "Models"
             case .health: return "Health"
+            case .admin: return "Admin"
             case .localSettings: return "Settings"
             case .habits: return "Habits"
             case .expenses: return "Expenses"
@@ -105,6 +107,7 @@ class AppState: ObservableObject {
             case .graph: return "network"
             case .models: return "cpu"
             case .health: return "heart"
+            case .admin: return "gauge.with.dots.needle.67percent"
             case .localSettings: return "slider.horizontal.3"
             case .habits: return "chart.bar"
             case .expenses: return "indianrupeesign.circle"
@@ -116,7 +119,7 @@ class AppState: ObservableObject {
             switch self {
             case .today, .onboarding, .search, .chat, .inbox, .intelligence: return .main
             case .meetings, .people, .decisions, .tasks, .promises, .review, .crossReferences, .documents, .workflows, .reports: return .knowledge
-            case .sync, .slack, .gmail, .calendar, .linear, .graph, .models, .health, .localSettings: return .integrations
+            case .sync, .slack, .gmail, .calendar, .linear, .graph, .models, .health, .admin, .localSettings: return .integrations
             case .habits, .expenses, .ideas: return .personal
             }
         }

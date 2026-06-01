@@ -9,3 +9,7 @@ Start with [Try SudoBrain In 5 Minutes](try-sudobrain-in-5-minutes.md), then
 read [Architecture](architecture.md), [Data Flow](data-flow.md), the
 [Feature Matrix](feature-matrix.md), [Plugin Development](plugin-development.md),
 [MCP Server](mcp.md), and [Model Providers](model-providers.md).
+
+For release preparation, use the [Release Checklist](release-checklist.md),
+[Screenshot Checklist](screenshots.md), and
+[Release Notes Template](release-notes-template.md).

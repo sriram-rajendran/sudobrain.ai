@@ -53,9 +53,11 @@ decisions, promises, and project risk.
 - Provider settings UI: started through `/models/status` safe configuration reporting.
 - OpenAI-compatible, Anthropic, Gemini, OpenRouter, Groq, Bedrock, and LM Studio configuration: started in `.env.example` and `backend/ai/providers.py`.
 - Usage analytics: planned.
-- Admin/debug dashboard: planned.
+- Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
+- Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
+- Observability status: started via `/observability/status`.
 - Fixture-based integration tests: started.
-- Release process and changelog: started.
+- Release process and changelog: started, with CI workflow and release notes template.
 
 ## Product Principles
 
