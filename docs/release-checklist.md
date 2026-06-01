@@ -23,6 +23,7 @@ Use this before tagging a public release.
 - Update `docs/roadmap.md` if roadmap status changed.
 - Build the macOS app.
 - Test `docker-compose.full.yml`.
+- Run `make package` for an unsigned source/backend release archive.
 - Attach release notes with known limitations.
 
 ## Community

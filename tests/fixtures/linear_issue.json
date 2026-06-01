@@ -1,0 +1,18 @@
+{
+  "id": "LIN-fixture-1",
+  "title": "Add roadmap fixture tests",
+  "description": "Cover Slack, Gmail, Fathom, and Linear fixture shapes.",
+  "state": {"name": "Todo", "type": "unstarted"},
+  "priority": 2,
+  "priorityLabel": "High",
+  "assignee": {"name": "Maya Chen", "email": "maya@example.test"},
+  "creator": {"name": "Alex Rivera"},
+  "team": {"name": "Platform"},
+  "project": {"name": "Open Source Readiness"},
+  "labels": {"nodes": [{"name": "testing"}]},
+  "dueDate": "2026-06-07",
+  "createdAt": "2026-06-01T09:00:00Z",
+  "updatedAt": "2026-06-01T10:00:00Z",
+  "url": "https://linear.example.test/LIN-fixture-1",
+  "comments": {"nodes": []}
+}

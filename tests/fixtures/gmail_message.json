@@ -1,0 +1,11 @@
+{
+  "id": "fixture-gmail-1",
+  "thread_id": "fixture-thread",
+  "subject": "Launch review follow-up",
+  "from": "Alex Rivera <alex@example.test>",
+  "to": ["maya@example.test"],
+  "date": "2026-06-01T09:00:00Z",
+  "snippet": "Please review the provenance export.",
+  "body": "Please review the provenance export and confirm the launch checklist by Friday.",
+  "labels": ["INBOX"]
+}

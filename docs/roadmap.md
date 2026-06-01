@@ -58,8 +58,8 @@ decisions, promises, and project risk.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
 - Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
 - Observability status: started via `/observability/status`.
-- Fixture-based integration tests: started.
-- Release process and changelog: started, with CI workflow and release notes template.
+- Fixture-based integration tests: shipped for Slack, Gmail, Fathom, and Linear fixture shapes.
+- Release process and changelog: started, with CI workflow, release notes template, and unsigned package script.
 
 ## Product Principles
 

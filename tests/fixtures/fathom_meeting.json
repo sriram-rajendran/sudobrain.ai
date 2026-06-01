@@ -1,0 +1,15 @@
+{
+  "recording_id": "fixture-fathom-1",
+  "title": "Fixture Fathom Meeting",
+  "created_at": "2026-06-01T09:00:00Z",
+  "recording_start_time": "2026-06-01T09:00:00Z",
+  "recording_end_time": "2026-06-01T09:30:00Z",
+  "share_url": "https://example.test/fathom/fixture",
+  "transcript": [
+    {"speaker": {"display_name": "Alex Rivera"}, "timestamp": "00:00", "text": "Decision: ship the web companion scaffold."},
+    {"speaker": {"display_name": "Maya Chen"}, "timestamp": "00:05", "text": "I will add fixture based tests."}
+  ],
+  "action_items": [
+    {"text": "Add fixture based tests", "assignee": {"name": "Maya Chen"}, "due_date": "2026-06-07"}
+  ]
+}

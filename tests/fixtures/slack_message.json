@@ -1,0 +1,11 @@
+{
+  "channel": {"id": "C_FIXTURE", "name": "fixture-launch"},
+  "message": {
+    "ts": "1717056000.000100",
+    "user_id": "U_FIXTURE",
+    "user_name": "Alex Rivera",
+    "text": "Decision: keep cloud providers opt-in. Maya will publish the citation card review by Friday.",
+    "reply_count": 1,
+    "reactions": [{"emoji": "white_check_mark", "users": ["U_REVIEWER"]}]
+  }
+}
