@@ -26,6 +26,8 @@ decisions, promises, and project risk.
 - Per-source privacy controls: shipped via `/privacy/sources`.
 - Source freshness dashboard: backend started via `/sources/freshness`.
 - Review queue filters by source, type, confidence, project, and age: shipped in `/review/queue`.
+- Reversible extraction review actions: shipped via `/review/actions` and undo endpoints.
+- Editable Markdown/JSON knowledge vault export: shipped via `/knowledge/vault/export`.
 
 ## P2: Make SudoBrain Extensible
 
@@ -52,8 +54,9 @@ decisions, promises, and project risk.
 
 ## P4: Make SudoBrain Community-Ready
 
-- Web/PWA companion: started in `web-companion/`.
+- Web/PWA companion: shipped for local search, streaming chat, quick capture, reports, and vault export in `web-companion/`.
 - Provider settings UI: started through `/models/status` safe configuration reporting.
+- Per-task provider routing rules: shipped via `/models/routing-rules` and `/models/route`.
 - OpenAI-compatible, OpenRouter, LM Studio, Anthropic, Gemini, Groq, and Bedrock execution scaffolds: shipped.
 - Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
@@ -69,6 +72,8 @@ decisions, promises, and project risk.
 
 - Mobile/non-Mac capture: shipped via `/capture/mobile`.
 - Chat-channel capture adapter: shipped via `/capture/channel/{channel_name}`.
+- Web companion quick-capture surface: shipped in `web-companion/`.
+- Chat streaming endpoint: shipped via `/chat/stream`.
 - Saved chat sessions and collections: shipped via `/chat/sessions`.
 - Prompt/provider switcher: shipped in the macOS Chat view.
 

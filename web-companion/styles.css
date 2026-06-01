@@ -16,7 +16,9 @@ main {
 }
 
 header,
-.toolbar {
+.toolbar,
+.row,
+nav {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -34,7 +36,10 @@ p {
 }
 
 button,
-input {
+input,
+select,
+textarea,
+a {
   font: inherit;
   border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
   border-radius: 6px;
@@ -43,12 +48,33 @@ input {
   color: CanvasText;
 }
 
+a {
+  text-decoration: none;
+}
+
 input {
   flex: 1;
 }
 
-.toolbar {
+textarea {
+  box-sizing: border-box;
+  min-height: 112px;
+  resize: vertical;
+  width: 100%;
+}
+
+.toolbar,
+.quick-capture,
+.chat-panel,
+.actions {
   margin: 22px 0;
+}
+
+.quick-capture,
+.chat-panel,
+.actions {
+  display: grid;
+  gap: 10px;
 }
 
 .grid {
@@ -68,4 +94,26 @@ pre {
   white-space: pre-wrap;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.answer {
+  min-height: 120px;
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 8px;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  header,
+  .toolbar,
+  .row,
+  nav {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  main {
+    padding: 16px;
+  }
 }

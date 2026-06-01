@@ -14,13 +14,48 @@
         <h1>SudoBrain</h1>
         <p>Local work-memory companion</p>
       </div>
-      <button id="refresh" aria-label="Refresh">Refresh</button>
-      <a href="./workflow-builder.html">Workflows</a>
+      <nav>
+        <button id="refresh" aria-label="Refresh">Refresh</button>
+        <a href="./workflow-builder.html">Workflows</a>
+      </nav>
     </header>
 
-    <section class="toolbar">
+    <section class="quick-capture">
+      <textarea id="captureText" placeholder="Capture a thought, pasted note, mobile share, or channel message"></textarea>
+      <div class="row">
+        <select id="captureSource" aria-label="Capture source">
+          <option value="mobile">Mobile</option>
+          <option value="web">Web</option>
+          <option value="telegram">Telegram style</option>
+          <option value="discord">Discord style</option>
+        </select>
+        <button id="capture">Capture</button>
+      </div>
+      <pre id="captureResult">Ready.</pre>
+    </section>
+
+    <section class="toolbar" aria-label="Knowledge search">
       <input id="query" placeholder="Search local knowledge">
       <button id="search">Search</button>
+    </section>
+
+    <section class="chat-panel">
+      <div class="row">
+        <input id="chatQuery" placeholder="Ask with local citations">
+        <select id="chatMode" aria-label="Chat mode">
+          <option value="offline">Offline</option>
+          <option value="stream">Stream</option>
+        </select>
+        <button id="ask">Ask</button>
+      </div>
+      <div id="chatAnswer" class="answer">Ask a question to begin.</div>
+      <pre id="chatSources">Sources will appear here.</pre>
+    </section>
+
+    <section class="actions">
+      <button id="weeklyReport">Export Weekly Report</button>
+      <button id="vaultExport">Export Knowledge Vault</button>
+      <pre id="actionResult">Local exports stay on this machine.</pre>
     </section>
 
     <section class="grid">

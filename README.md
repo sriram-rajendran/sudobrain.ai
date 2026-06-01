@@ -51,7 +51,7 @@ the demo workspace.
 - `backend/`: FastAPI service, source sync, extraction, storage, graph, and audit logic.
 - `app/`: macOS SwiftUI client.
 - `browser-extension/`: lightweight capture extension.
-- `web-companion/`: local browser/PWA companion for non-Mac read-only access.
+- `web-companion/`: local browser/PWA companion for non-Mac capture, chat, search, and exports.
 - `mockups/`: design prototypes.
 - `scripts/`: optional local maintenance helpers.
 

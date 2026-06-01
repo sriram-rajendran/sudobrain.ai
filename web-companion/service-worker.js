@@ -1,4 +1,4 @@
-const cacheName = "sudobrain-companion-v1";
+const cacheName = "sudobrain-companion-v2";
 const assets = ["./index.html", "./workflow-builder.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
