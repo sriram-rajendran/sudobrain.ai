@@ -45,7 +45,7 @@ decisions, promises, and project risk.
 ## P3: Make SudoBrain Productive
 
 - Workflow templates: started via `/workflows/templates`.
-- Scheduled agent runner: existing heartbeat evaluation, UI still planned.
+- Scheduled agent runner: shipped via `/scheduler/status`, `/heartbeat/trigger`, `/intelligence/run-now`, and the Admin scheduled agents panel.
 - Agent run history and replay: shipped via `/workflows/log`, `/workflows/log/{log_id}/replay`, and the macOS workflow view.
 - Tool-call trace viewer: workflow trace backend and UI started.
 - Approval steps before external writes: approval queue scaffold started.

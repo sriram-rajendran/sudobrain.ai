@@ -399,3 +399,31 @@ def stop_scheduler():
 def is_scheduler_running() -> bool:
     """Return whether the APScheduler instance is active."""
     return bool(_scheduler and _scheduler.running)
+
+
+def scheduler_status() -> dict:
+    """Return safe scheduler/job metadata for admin and onboarding surfaces."""
+    jobs = []
+    if _scheduler is not None:
+        try:
+            for job in _scheduler.get_jobs():
+                jobs.append({
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                    "trigger": str(job.trigger),
+                    "pending": bool(getattr(job, "pending", False)),
+                })
+        except Exception as e:
+            logger.debug("Scheduler job listing failed: %s", e)
+    return {
+        "running": is_scheduler_running(),
+        "job_count": len(jobs),
+        "jobs": jobs,
+        "heartbeat_interval_minutes": 15,
+        "active_hours": {"start": "08:00", "end": "22:00"},
+        "manual_triggers": {
+            "heartbeat": "/heartbeat/trigger",
+            "intelligence": "/intelligence/run-now?group=all",
+        },
+    }

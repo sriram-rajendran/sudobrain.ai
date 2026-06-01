@@ -949,6 +949,9 @@ struct AdminDebugView: View {
     @State private var dashboard: [String: Any] = [:]
     @State private var observability: [String: Any] = [:]
     @State private var usage: [String: Any] = [:]
+    @State private var scheduler: [String: Any] = [:]
+    @State private var heartbeatResult: [String: Any] = [:]
+    @State private var intelligenceResult: [String: Any] = [:]
     @State private var audit: [[String: Any]] = []
     @State private var requestLog: [String] = []
 
@@ -964,6 +967,27 @@ struct AdminDebugView: View {
                 Section("Observability") {
                     KeyValueCard(title: "Capabilities", values: observability)
                     KeyValueCard(title: "Usage", values: usage)
+                }
+                Section("Scheduled Agents") {
+                    KeyValueCard(title: "Scheduler", values: scheduler)
+                    HStack {
+                        Button {
+                            Task { await triggerHeartbeat() }
+                        } label: {
+                            Label("Run Heartbeat", systemImage: "heart.text.square")
+                        }
+                        Button {
+                            Task { await runIntelligence() }
+                        } label: {
+                            Label("Run Intelligence", systemImage: "brain")
+                        }
+                    }
+                    if !heartbeatResult.isEmpty {
+                        KeyValueCard(title: "Heartbeat Result", values: heartbeatResult)
+                    }
+                    if !intelligenceResult.isEmpty {
+                        KeyValueCard(title: "Intelligence Result", values: intelligenceResult)
+                    }
                 }
                 Section("Audit Log") {
                     ForEach(audit.indices, id: \.self) { i in
@@ -986,9 +1010,20 @@ struct AdminDebugView: View {
         dashboard = (try? await APIClient.shared.getRawObject("/admin/dashboard")) ?? [:]
         observability = (try? await APIClient.shared.getRawObject("/observability/status")) ?? [:]
         usage = (try? await APIClient.shared.getRawObject("/usage/analytics")) ?? [:]
+        scheduler = (try? await APIClient.shared.getRawObject("/scheduler/status")) ?? [:]
         audit = (try? await APIClient.shared.getRaw("/admin/audit-log?limit=50")) ?? []
         let logs = (try? await APIClient.shared.getRawObject("/admin/request-log?limit=50")) ?? [:]
         requestLog = logs["lines"] as? [String] ?? []
+    }
+
+    private func triggerHeartbeat() async {
+        heartbeatResult = (try? await APIClient.shared.post("/heartbeat/trigger", body: [:])) ?? [:]
+        await load()
+    }
+
+    private func runIntelligence() async {
+        intelligenceResult = (try? await APIClient.shared.post("/intelligence/run-now?group=all", body: [:], timeout: 180)) ?? [:]
+        await load()
     }
 }
 

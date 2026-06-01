@@ -1074,6 +1074,13 @@ def trigger_heartbeat():
     return {"triggered": True, "notifications": get_notifications()}
 
 
+@app.get("/scheduler/status")
+def scheduled_agent_status():
+    """Return heartbeat and scheduled intelligence job status."""
+    from backend.heartbeat.engine import scheduler_status
+    return scheduler_status()
+
+
 # ── Onboarding / Configuration ──
 
 @app.get("/onboarding/status")
@@ -2039,9 +2046,9 @@ def reject(action_id: int):
 def system_status():
     """Return local safety-control and scheduler status."""
     from backend.ai.guardrails import get_system_control_status
-    from backend.heartbeat.engine import is_scheduler_running
+    from backend.heartbeat.engine import scheduler_status
     status = get_system_control_status()
-    status["scheduler"] = {"running": is_scheduler_running()}
+    status["scheduler"] = scheduler_status()
     return status
 
 
