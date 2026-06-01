@@ -34,6 +34,28 @@ for document in connector.fetch(limit=10):
     print(document.title, document.external_id)
 ```
 
+The built-in runtime exposes safe preview endpoints that do not ingest data or
+execute external plugin code:
+
+```bash
+curl http://127.0.0.1:8420/extensions
+curl -X POST http://127.0.0.1:8420/extensions/connectors/local-markdown/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"root":"./docs","limit":5}'
+```
+
+Sample modules and actions can also be previewed without writes:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/intelligence/keyword-risk/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"documents":[{"source":"demo","external_id":"1","title":"Plan","text":"Launch delay risk"}]}'
+
+curl -X POST http://127.0.0.1:8420/extensions/actions/draft-notification/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"payload":{"title":"Review","body":"Check risk"}}'
+```
+
 ## Workflow Action Rules
 
 - Write-capable actions must support `dry_run=True`.

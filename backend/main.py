@@ -2331,6 +2331,21 @@ class LocalSecretRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=20000)
 
 
+class LocalMarkdownPreviewRequest(BaseModel):
+    root: str = Field(..., min_length=1, max_length=2000)
+    glob: str = "**/*.md"
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class IntelligencePreviewRequest(BaseModel):
+    documents: list[dict] = Field(default_factory=list)
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class WorkflowActionPreviewRequest(BaseModel):
+    payload: dict = Field(default_factory=dict)
+
+
 @app.get("/security/secrets/status")
 def local_secrets_status():
     """Return encrypted local secret-store status without secret values."""
@@ -2380,6 +2395,34 @@ def plugin_registry():
     """List built-in and discovered plugin manifests."""
     from backend.plugins.registry import discover_plugins
     return discover_plugins()
+
+
+@app.get("/extensions")
+def extension_runtime_registry():
+    """List extension SDK examples that can run in safe preview mode."""
+    from backend.extensions.runtime import list_extensions
+    return list_extensions()
+
+
+@app.post("/extensions/connectors/local-markdown/preview")
+def extension_local_markdown_preview(request: LocalMarkdownPreviewRequest):
+    """Preview the built-in local Markdown connector without ingesting data."""
+    from backend.extensions.runtime import local_markdown_preview
+    return local_markdown_preview(request.root, glob=request.glob, limit=request.limit)
+
+
+@app.post("/extensions/intelligence/keyword-risk/preview")
+def extension_keyword_risk_preview(request: IntelligencePreviewRequest):
+    """Preview the sample intelligence module without writing extracted knowledge."""
+    from backend.extensions.runtime import keyword_risk_preview
+    return keyword_risk_preview(request.documents, limit=request.limit)
+
+
+@app.post("/extensions/actions/draft-notification/preview")
+def extension_action_preview(request: WorkflowActionPreviewRequest):
+    """Preview the sample workflow action in dry-run mode."""
+    from backend.extensions.runtime import workflow_action_preview
+    return workflow_action_preview(request.payload)
 
 
 @app.get("/mcp/client/status")

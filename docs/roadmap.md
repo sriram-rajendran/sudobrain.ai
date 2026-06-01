@@ -32,15 +32,15 @@ decisions, promises, and project risk.
 
 ## P2: Make SudoBrain Extensible
 
-- Connector SDK: started in `backend/sdk/interfaces.py`.
-- Intelligence module SDK: started in `backend/sdk/interfaces.py`.
-- Workflow action SDK: started in `backend/sdk/interfaces.py`.
+- Connector SDK: shipped with protocols, Local Markdown example, and safe preview runtime.
+- Intelligence module SDK: shipped with protocols, Keyword Risk example, and safe preview runtime.
+- Workflow action SDK: shipped with protocols, Draft Notification example, and dry-run preview runtime.
 - Local Markdown connector example: shipped in `backend/connectors/local_markdown.py`.
 - MCP server for SudoBrain knowledge: started in `scripts/sudobrain_mcp_server.py`.
 - Sample intelligence module: shipped in `backend/intelligence/sample_module.py`.
 - Sample workflow action: shipped in `backend/actions/sample_workflow_action.py`.
 - MCP client/tool support: config/status scaffold started via `/mcp/client/status`.
-- Plugin registry: discovery scaffold started via `/plugins`.
+- Plugin registry: shipped via `/plugins` and `/extensions` with built-in runtime previews.
 - Plugin developer documentation: shipped in `docs/plugin-development.md`.
 
 ## P3: Make SudoBrain Productive
