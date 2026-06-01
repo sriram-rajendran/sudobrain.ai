@@ -1,5 +1,5 @@
 const cacheName = "sudobrain-companion-v1";
-const assets = ["./index.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
+const assets = ["./index.html", "./workflow-builder.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));

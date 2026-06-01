@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SudoBrain Workflow Builder</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Workflow Builder</h1>
+        <p>Template-driven local workflow graph</p>
+      </div>
+      <button id="refresh">Refresh</button>
+    </header>
+    <section class="grid">
+      <article>
+        <h2>Templates</h2>
+        <pre id="templates">Loading...</pre>
+      </article>
+      <article>
+        <h2>Graph</h2>
+        <pre id="graph">Loading...</pre>
+      </article>
+    </section>
+  </main>
+  <script>
+    const api = "http://127.0.0.1:8420";
+    async function getJson(path) {
+      const response = await fetch(`${api}${path}`);
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return response.json();
+    }
+    function render(id, value) {
+      document.getElementById(id).textContent = JSON.stringify(value, null, 2);
+    }
+    async function refresh() {
+      try {
+        const graph = await getJson("/workflows/graph");
+        render("templates", graph.templates || []);
+        render("graph", { nodes: graph.nodes, edges: graph.edges });
+      } catch (error) {
+        render("graph", { error: error.message });
+      }
+    }
+    document.getElementById("refresh").addEventListener("click", refresh);
+    refresh();
+  </script>
+</body>
+</html>

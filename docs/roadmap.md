@@ -23,6 +23,7 @@ decisions, promises, and project risk.
 - Confidence scoring for stored knowledge: started through provenance responses.
 - Portable graph export: started via `/graph/export`.
 - Retention policy controls: started via `/privacy/retention`.
+- Per-source privacy controls: shipped via `/privacy/sources`.
 - Source freshness dashboard: backend started via `/sources/freshness`.
 - Review queue filters by source, type, confidence, project, and age: shipped in `/review/queue`.
 
@@ -46,6 +47,7 @@ decisions, promises, and project risk.
 - Agent run history and replay: workflow history started, full replay planned.
 - Tool-call trace viewer: workflow trace backend and UI started.
 - Approval steps before external writes: approval queue scaffold started.
+- Visual/no-code workflow builder: started via `/workflows/graph` and `web-companion/workflow-builder.html`.
 - Report sharing/export: local Markdown/JSON export and share artifacts shipped.
 
 ## P4: Make SudoBrain Community-Ready

@@ -2747,6 +2747,33 @@ def workflow_template_list():
     return workflow_templates()
 
 
+@app.get("/workflows/graph")
+def workflow_graph():
+    """Return workflow rules as a node-link graph for visual builders."""
+    from backend.intelligence.workflows import list_rules, workflow_templates
+    rules = list_rules()
+    nodes = []
+    edges = []
+    for rule in rules:
+        rid = f"rule:{rule['id']}"
+        trigger_id = f"trigger:{rule['trigger_type']}"
+        action_id = f"action:{rule['action_type']}"
+        nodes.extend([
+            {"id": trigger_id, "type": "trigger", "label": rule["trigger_type"]},
+            {"id": rid, "type": "rule", "label": rule["name"], "enabled": rule.get("enabled")},
+            {"id": action_id, "type": "action", "label": rule["action_type"]},
+        ])
+        edges.extend([
+            {"source": trigger_id, "target": rid, "type": "activates"},
+            {"source": rid, "target": action_id, "type": "executes"},
+        ])
+    return {
+        "nodes": list({node["id"]: node for node in nodes}.values()),
+        "edges": edges,
+        "templates": workflow_templates(),
+    }
+
+
 @app.post("/workflows/evaluate")
 def evaluate_workflows():
     """Manually trigger workflow evaluation."""
@@ -3884,6 +3911,40 @@ async def save_retention_policy(request: Request):
             config[key] = str(value)
     _save_local_config(config)
     return retention_policy()
+
+
+@app.get("/privacy/sources")
+def source_privacy_controls():
+    """Return per-source privacy controls."""
+    config = _load_local_config()
+    sources = ["slack", "gmail", "fathom", "linear", "calendar", "projects", "documents", "bookmarks"]
+    controls = {}
+    for source in sources:
+        prefix = f"SUDOBRAIN_PRIVACY_{source.upper()}"
+        controls[source] = {
+            "enabled": str(config.get(f"{prefix}_ENABLED", "true")).lower() != "false",
+            "store_raw": str(config.get(f"{prefix}_STORE_RAW", "true")).lower() != "false",
+            "extract_knowledge": str(config.get(f"{prefix}_EXTRACT", "true")).lower() != "false",
+            "include_in_chat": str(config.get(f"{prefix}_CHAT", "true")).lower() != "false",
+        }
+    return {"sources": controls, "config_path": str(CONFIG_PATH)}
+
+
+@app.post("/privacy/sources")
+async def save_source_privacy_controls(request: Request):
+    """Save per-source privacy controls without deleting existing data."""
+    payload = await request.json()
+    config = _load_local_config()
+    allowed_sources = {"slack", "gmail", "fathom", "linear", "calendar", "projects", "documents", "bookmarks"}
+    allowed_keys = {"enabled": "ENABLED", "store_raw": "STORE_RAW", "extract_knowledge": "EXTRACT", "include_in_chat": "CHAT"}
+    for source, controls in payload.get("sources", {}).items():
+        if source not in allowed_sources or not isinstance(controls, dict):
+            continue
+        for key, env_suffix in allowed_keys.items():
+            if key in controls:
+                config[f"SUDOBRAIN_PRIVACY_{source.upper()}_{env_suffix}"] = "true" if bool(controls[key]) else "false"
+    _save_local_config(config)
+    return source_privacy_controls()
 
 
 @app.get("/privacy/retention/preview")

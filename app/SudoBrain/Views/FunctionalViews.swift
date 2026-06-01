@@ -527,6 +527,7 @@ struct WorkflowsView: View {
     @State private var templates: [[String: Any]] = []
     @State private var approvals: [[String: Any]] = []
     @State private var trace: [[String: Any]] = []
+    @State private var graph: [String: Any] = [:]
     @State private var name = ""
     @State private var trigger = "task_overdue"
     @State private var action = "flag_inbox"
@@ -634,6 +635,9 @@ struct WorkflowsView: View {
                         KeyValueCard(title: trace[i]["step"] as? String ?? "Trace", values: trace[i])
                     }
                 }
+                Section("Visual Builder Graph") {
+                    KeyValueCard(title: "Graph", values: graph)
+                }
             }
         }
         .task { await load() }
@@ -645,6 +649,7 @@ struct WorkflowsView: View {
         templates = (try? await APIClient.shared.getRaw("/workflows/templates")) ?? []
         approvals = (try? await APIClient.shared.getRaw("/workflows/approvals")) ?? []
         trace = (try? await APIClient.shared.getRaw("/workflows/trace?limit=50")) ?? []
+        graph = (try? await APIClient.shared.getRawObject("/workflows/graph")) ?? [:]
     }
 
     private func createRule() async {
@@ -854,6 +859,7 @@ struct LocalSettingsView: View {
     @State private var values: [String: String] = [:]
     @State private var retention: [String: Any] = [:]
     @State private var retentionPreview: [String: Any] = [:]
+    @State private var sourcePrivacy: [String: Any] = [:]
     @State private var message = ""
 
     var body: some View {
@@ -887,6 +893,7 @@ struct LocalSettingsView: View {
                 Section("Retention Preview") {
                     KeyValueCard(title: "Policy", values: retention)
                     KeyValueCard(title: "Dry Run", values: retentionPreview)
+                    KeyValueCard(title: "Source Privacy", values: sourcePrivacy)
                     Button {
                         Task { await loadRetention() }
                     } label: {
@@ -921,6 +928,7 @@ struct LocalSettingsView: View {
     private func loadRetention() async {
         retention = (try? await APIClient.shared.getRawObject("/privacy/retention")) ?? [:]
         retentionPreview = (try? await APIClient.shared.getRawObject("/privacy/retention/preview")) ?? [:]
+        sourcePrivacy = (try? await APIClient.shared.getRawObject("/privacy/sources")) ?? [:]
     }
 }
 
