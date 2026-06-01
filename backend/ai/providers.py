@@ -48,9 +48,10 @@ PROVIDERS = {
     },
     "groq": {
         "label": "Groq",
-        "base_url_env": None,
+        "base_url_env": "GROQ_BASE_URL",
         "model_env": "GROQ_MODEL",
         "api_key_env": "GROQ_API_KEY",
+        "default_base_url": "https://api.groq.com/openai/v1",
         "local_default": False,
     },
     "bedrock": {
@@ -127,6 +128,95 @@ class OpenAICompatibleClient(ProviderClient):
             return ProviderResult(self.provider, "error", error=str(exc), metadata={"model": model})
 
 
+class AnthropicClient(ProviderClient):
+    def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
+        api_key = os.getenv(self.config.get("api_key_env") or "", "")
+        model = os.getenv(self.config.get("model_env") or "", self.config.get("model") or "claude-3-5-haiku-latest")
+        if not api_key or not model:
+            return ProviderResult(self.provider, "not_configured", error="API key and model are required.")
+        try:
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            text = "".join(block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text")
+            return ProviderResult(self.provider, "ok", text=text, metadata={"model": model})
+        except Exception as exc:
+            return ProviderResult(self.provider, "error", error=str(exc), metadata={"model": model})
+
+
+class GeminiClient(ProviderClient):
+    def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
+        api_key = os.getenv(self.config.get("api_key_env") or "", "")
+        model = os.getenv(self.config.get("model_env") or "", self.config.get("model") or "gemini-1.5-flash")
+        if not api_key or not model:
+            return ProviderResult(self.provider, "not_configured", error="API key and model are required.")
+        try:
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                params={"key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            text = "".join(part.get("text", "") for part in parts)
+            return ProviderResult(self.provider, "ok", text=text, metadata={"model": model})
+        except Exception as exc:
+            return ProviderResult(self.provider, "error", error=str(exc), metadata={"model": model})
+
+
+class GroqClient(OpenAICompatibleClient):
+    def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
+        if not os.getenv("GROQ_API_KEY", ""):
+            return ProviderResult(self.provider, "not_configured", error="GROQ_API_KEY is required.")
+        os.environ.setdefault("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        self.config["base_url_env"] = "GROQ_BASE_URL"
+        return super().complete(prompt, max_tokens=max_tokens, temperature=temperature)
+
+
+class BedrockClient(ProviderClient):
+    def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
+        model = os.getenv(self.config.get("model_env") or "", self.config.get("model") or "")
+        if not model:
+            return ProviderResult(self.provider, "not_configured", error="BEDROCK_MODEL is required.")
+        try:
+            import boto3
+        except Exception as exc:
+            return ProviderResult(self.provider, "missing_dependency", error=f"boto3 is required for Bedrock: {exc}")
+        try:
+            client = boto3.client("bedrock-runtime")
+            body = {
+                "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+            }
+            response = client.converse(modelId=model, **body)
+            text = "".join(
+                item.get("text", "")
+                for item in response.get("output", {}).get("message", {}).get("content", [])
+            )
+            return ProviderResult(self.provider, "ok", text=text, metadata={"model": model})
+        except Exception as exc:
+            return ProviderResult(self.provider, "error", error=str(exc), metadata={"model": model})
+
+
 def configured_providers() -> dict:
     """Return safe provider configuration state."""
     active = os.getenv("SUDOBRAIN_LLM_PROVIDER", "ollama")
@@ -163,6 +253,14 @@ def get_provider_client(provider: str | None = None) -> ProviderClient:
     provider_config = config["providers"].get(selected, {})
     if selected in {"openai_compatible", "openrouter", "lm_studio"}:
         return OpenAICompatibleClient(selected, provider_config)
+    if selected == "anthropic":
+        return AnthropicClient(selected, provider_config)
+    if selected == "gemini":
+        return GeminiClient(selected, provider_config)
+    if selected == "groq":
+        return GroqClient(selected, provider_config)
+    if selected == "bedrock":
+        return BedrockClient(selected, provider_config)
     return ProviderClient(selected, provider_config)
 
 

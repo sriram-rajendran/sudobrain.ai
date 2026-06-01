@@ -1870,6 +1870,13 @@ def observability_status():
     }
 
 
+@app.get("/security/policy")
+def security_policy_status():
+    """Return local RBAC, SSO, quota, and secrets policy status."""
+    from backend.security.policy import security_policy
+    return security_policy()
+
+
 @app.get("/plugins")
 def plugin_registry():
     """List built-in and discovered plugin manifests."""
