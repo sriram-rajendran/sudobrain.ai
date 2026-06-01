@@ -10,3 +10,6 @@
 - Expanded onboarding readiness checks for local storage, Chroma, Calendar, and demo data.
 - Added open-source adoption docs: architecture, data flow, feature matrix, roadmap, release checklist, and five-minute quickstart.
 - Added code of conduct and GitHub issue templates.
+- Added extension SDK protocols for connectors, intelligence modules, and workflow actions.
+- Added a read-only local Markdown connector example.
+- Added a lightweight SudoBrain MCP server scaffold and documentation.

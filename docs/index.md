@@ -6,5 +6,6 @@ context into reviewable actions, decisions, promises, people, projects, and
 risks.
 
 Start with [Try SudoBrain In 5 Minutes](try-sudobrain-in-5-minutes.md), then
-read [Architecture](architecture.md), [Data Flow](data-flow.md), and the
-[Feature Matrix](feature-matrix.md).
+read [Architecture](architecture.md), [Data Flow](data-flow.md), the
+[Feature Matrix](feature-matrix.md), [Plugin Development](plugin-development.md),
+and [MCP Server](mcp.md).

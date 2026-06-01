@@ -1,4 +1,4 @@
-.PHONY: verify verify-fast swift-build python-compile scan-secrets demo smoke docker-up docker-full-up clean
+.PHONY: verify verify-fast swift-build python-compile scan-secrets demo smoke mcp-server docker-up docker-full-up clean
 
 verify:
 	python3 scripts/verify_public_repo.py
@@ -11,6 +11,9 @@ demo:
 
 smoke:
 	python3 scripts/smoke_test_startup.py
+
+mcp-server:
+	python3 scripts/sudobrain_mcp_server.py
 
 docker-up:
 	docker compose up -d postgres neo4j

@@ -25,12 +25,13 @@ decisions, promises, and project risk.
 
 ## P2: Make SudoBrain Extensible
 
-- Connector SDK: planned.
-- Intelligence module SDK: planned.
-- Workflow action SDK: planned.
-- MCP server for SudoBrain knowledge: planned.
+- Connector SDK: started in `backend/sdk/interfaces.py`.
+- Intelligence module SDK: started in `backend/sdk/interfaces.py`.
+- Workflow action SDK: started in `backend/sdk/interfaces.py`.
+- Local Markdown connector example: shipped in `backend/connectors/local_markdown.py`.
+- MCP server for SudoBrain knowledge: started in `scripts/sudobrain_mcp_server.py`.
 - MCP client/tool support: planned.
-- Plugin developer documentation: planned.
+- Plugin developer documentation: shipped in `docs/plugin-development.md`.
 
 ## P3: Make SudoBrain Productive
 
