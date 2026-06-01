@@ -20,3 +20,4 @@
 - Added sample intelligence module, sample workflow action, expanded MCP tools, and unit contract tests.
 - Added local admin dashboard, audit/request log, observability status, usage analytics, CI workflow, and release docs.
 - Added review queue filters, report export/share artifacts, plugin registry discovery, and MCP client status.
+- Added OpenAI-compatible provider execution scaffold and a local web/PWA companion.

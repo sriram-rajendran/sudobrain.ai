@@ -1,0 +1,71 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header,
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+p {
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+}
+
+button,
+input {
+  font: inherit;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: Canvas;
+  color: CanvasText;
+}
+
+input {
+  flex: 1;
+}
+
+.toolbar {
+  margin: 22px 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+article {
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.45;
+}

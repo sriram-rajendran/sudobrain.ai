@@ -50,9 +50,10 @@ decisions, promises, and project risk.
 
 ## P4: Make SudoBrain Community-Ready
 
-- Web/PWA companion: planned.
+- Web/PWA companion: started in `web-companion/`.
 - Provider settings UI: started through `/models/status` safe configuration reporting.
-- OpenAI-compatible, Anthropic, Gemini, OpenRouter, Groq, Bedrock, and LM Studio configuration: started in `.env.example` and `backend/ai/providers.py`.
+- OpenAI-compatible, OpenRouter, and LM Studio execution scaffolds: started.
+- Anthropic, Gemini, Groq, and Bedrock execution clients: planned.
 - Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
 - Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SudoBrain Companion</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>SudoBrain</h1>
+        <p>Local work-memory companion</p>
+      </div>
+      <button id="refresh" aria-label="Refresh">Refresh</button>
+    </header>
+
+    <section class="toolbar">
+      <input id="query" placeholder="Search local knowledge">
+      <button id="search">Search</button>
+    </section>
+
+    <section class="grid">
+      <article>
+        <h2>Health</h2>
+        <pre id="health">Loading...</pre>
+      </article>
+      <article>
+        <h2>Today</h2>
+        <pre id="briefing">Loading...</pre>
+      </article>
+      <article>
+        <h2>Sources</h2>
+        <pre id="sources">Loading...</pre>
+      </article>
+      <article>
+        <h2>Search</h2>
+        <pre id="results">Search to begin.</pre>
+      </article>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

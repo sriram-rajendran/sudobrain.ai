@@ -62,6 +62,8 @@ def main() -> None:
         '@app.get("/mcp/client/status")',
         '@app.get("/reports/{period}/export")',
         '@app.post("/reports/{period}/share")',
+        '@app.get("/models/providers/health")',
+        '@app.post("/models/providers/test")',
     ])
     require_text("app/SudoBrain/AppState.swift", [
         "case onboarding",

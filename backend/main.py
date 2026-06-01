@@ -3196,6 +3196,23 @@ def models_status():
     return {"available_models": available, "task_assignments": assignments, "provider_config": configured_providers()}
 
 
+@app.get("/models/providers/health")
+def model_provider_health():
+    """Return safe provider health/configuration status."""
+    from backend.ai.providers import provider_health
+    return provider_health()
+
+
+@app.post("/models/providers/test")
+async def model_provider_test(request: Request):
+    """Run an opt-in provider completion test."""
+    from backend.ai.providers import complete_with_provider
+    payload = await request.json()
+    prompt = payload.get("prompt", "Reply with the word ok.")
+    provider = payload.get("provider")
+    return complete_with_provider(prompt=prompt[:2000], provider=provider, max_tokens=min(int(payload.get("max_tokens", 64)), 512))
+
+
 @app.post("/models/refresh")
 def models_refresh():
     """Refresh available model detection (run after pulling new models)."""
