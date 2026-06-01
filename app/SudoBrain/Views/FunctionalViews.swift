@@ -627,7 +627,15 @@ struct WorkflowsView: View {
                 }
                 Section("Log") {
                     ForEach(log.indices, id: \.self) { i in
-                        KeyValueCard(title: log[i]["rule_name"] as? String ?? "Run", values: log[i])
+                        HStack {
+                            KeyValueCard(title: log[i]["rule_name"] as? String ?? "Run", values: log[i])
+                            Button {
+                                Task { await replayRun(log[i]["id"] as? Int) }
+                            } label: {
+                                Image(systemName: "arrow.clockwise.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
                     }
                 }
                 Section("Trace") {
@@ -705,6 +713,11 @@ struct WorkflowsView: View {
     private func dryRunRule(_ id: Int?) async {
         guard let id else { return }
         preview = (try? await APIClient.shared.getRawObject("/workflows/\(id)/dry-run")) ?? [:]
+    }
+
+    private func replayRun(_ id: Int?) async {
+        guard let id else { return }
+        preview = (try? await APIClient.shared.getRawObject("/workflows/log/\(id)/replay")) ?? [:]
     }
 
     private func applyTemplate(_ template: [String: Any]) {

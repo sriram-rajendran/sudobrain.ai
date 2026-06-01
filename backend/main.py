@@ -3016,6 +3016,16 @@ def workflow_trace(limit: int = 100):
     return get_workflow_trace(min(limit, 500))
 
 
+@app.get("/workflows/log/{log_id}/replay")
+def workflow_replay(log_id: int):
+    """Reconstruct a workflow run for read-only debugging/replay."""
+    from backend.intelligence.workflows import get_workflow_replay
+    replay = get_workflow_replay(log_id)
+    if not replay:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    return replay
+
+
 @app.get("/workflows/approvals")
 def workflow_approvals(status: str = "pending", limit: int = 100):
     """List workflow actions waiting for approval."""

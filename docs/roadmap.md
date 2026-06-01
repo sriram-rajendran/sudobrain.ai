@@ -46,7 +46,7 @@ decisions, promises, and project risk.
 
 - Workflow templates: started via `/workflows/templates`.
 - Scheduled agent runner: existing heartbeat evaluation, UI still planned.
-- Agent run history and replay: workflow history started, full replay planned.
+- Agent run history and replay: shipped via `/workflows/log`, `/workflows/log/{log_id}/replay`, and the macOS workflow view.
 - Tool-call trace viewer: workflow trace backend and UI started.
 - Approval steps before external writes: approval queue scaffold started.
 - Visual/no-code workflow builder: started via `/workflows/graph` and `web-companion/workflow-builder.html`.

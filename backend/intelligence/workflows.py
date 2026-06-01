@@ -401,6 +401,47 @@ def get_workflow_trace(limit: int = 100) -> list[dict]:
         conn.close()
 
 
+def get_workflow_replay(log_id: int) -> dict:
+    """Reconstruct a workflow run with rule, trace, and current dry-run matches."""
+    import json
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        log_row = conn.execute("SELECT * FROM workflow_log WHERE id = ?", (log_id,)).fetchone()
+        if not log_row:
+            return {}
+        log = dict(log_row)
+        rule_row = conn.execute("SELECT * FROM workflow_rules WHERE id = ?", (log.get("rule_id"),)).fetchone()
+        rule = dict(rule_row) if rule_row else {}
+        trace_rows = conn.execute(
+            """SELECT * FROM workflow_trace
+            WHERE rule_id = ? AND created_at <= ?
+            ORDER BY created_at DESC LIMIT 20""",
+            (log.get("rule_id"), log.get("created_at")),
+        ).fetchall()
+        trace = [dict(row) for row in trace_rows]
+    finally:
+        conn.close()
+
+    condition = {}
+    if rule.get("condition_json"):
+        try:
+            condition = json.loads(rule["condition_json"])
+        except Exception:
+            condition = {}
+
+    return {
+        "log": log,
+        "rule": rule,
+        "trace": trace,
+        "current_preview": preview_rule(
+            trigger_type=rule.get("trigger_type") or log.get("trigger_type"),
+            condition=condition,
+        ),
+        "replay_mode": "read_only",
+    }
+
+
 def list_approvals(status: str = "pending", limit: int = 100) -> list[dict]:
     init_workflow_tables()
     conn = get_connection()
