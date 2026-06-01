@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SudoBrain — Meeting Detail</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root {
+    --bg-primary:#1C1C1E;--bg-secondary:#2C2C2E;--bg-tertiary:#3A3A3C;
+    --fg-primary:#FFFFFF;--fg-secondary:rgba(235,235,245,0.6);--fg-tertiary:rgba(235,235,245,0.3);
+    --separator:rgba(235,235,245,0.08);--accent:#0A84FF;--accent-dim:rgba(10,132,255,0.15);
+    --warning:#FF9F0A;--success:#30D158;--error:#FF453A;
+  }
+  .light{--bg-primary:#FFFFFF;--bg-secondary:#F2F2F7;--bg-tertiary:#E5E5EA;
+    --fg-primary:#000000;--fg-secondary:rgba(60,60,67,0.6);--fg-tertiary:rgba(60,60,67,0.3);
+    --separator:rgba(60,60,67,0.08);--accent:#007AFF;--accent-dim:rgba(0,122,255,0.1);
+    --success:#34C759;--warning:#FF9500;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+    background:#0D0D0D;display:flex;justify-content:center;align-items:center;
+    min-height:100vh;padding:40px;color:var(--fg-primary);-webkit-font-smoothing:antialiased;}
+  .win{width:1100px;height:720px;border-radius:10px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);
+    display:flex;flex-direction:column;background:var(--bg-primary);}
+  .tb{height:52px;background:var(--bg-secondary);border-bottom:0.5px solid var(--separator);
+    display:flex;align-items:center;padding:0 16px;flex-shrink:0;}
+  .tl-g{display:flex;gap:8px;}.tl{width:12px;height:12px;border-radius:50%;}
+  .tl-c{background:#FF5F57;}.tl-m{background:#FEBC2E;}.tl-x{background:#28C840;}
+  .tb-c{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--fg-secondary);}
+  .tb-a{display:flex;gap:4px;align-items:center;}
+  .tb-b{background:none;border:none;color:var(--fg-secondary);cursor:pointer;padding:6px 8px;
+    border-radius:8px;transition:background 0.15s;display:flex;align-items:center;font-size:12px;font-family:inherit;}
+  .tb-b:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .tb-b i{font-size:14px;}
+  .main{display:flex;flex:1;overflow:hidden;}
+
+  /* Sidebar — compact version */
+  .sb{width:220px;background:var(--bg-secondary);border-right:0.5px solid var(--separator);
+    padding:8px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;}
+  .sb-s{margin-bottom:4px;}
+  .sb-l{font-size:11px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px 4px;}
+  .si{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;
+    cursor:pointer;font-size:13px;color:var(--fg-secondary);transition:all 0.15s;position:relative;}
+  .si:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .si.a{background:var(--accent-dim);color:var(--accent);}
+  .si i{font-size:15px;flex-shrink:0;width:18px;text-align:center;}
+  .si .bd{position:absolute;right:8px;background:var(--accent);color:white;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;}
+  .sb-sp{flex:1;}
+
+  /* Meeting list */
+  .mtg-list{width:280px;border-right:0.5px solid var(--separator);overflow-y:auto;padding:8px;}
+  .mtg-list-header{padding:8px 8px 12px;font-size:12px;font-weight:600;color:var(--fg-secondary);text-transform:uppercase;letter-spacing:0.5px;}
+  .mtg-item{padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:2px;transition:background 0.15s;}
+  .mtg-item:hover{background:var(--bg-tertiary);}
+  .mtg-item.active{background:var(--accent-dim);}
+  .mtg-title{font-size:13px;font-weight:500;color:var(--fg-primary);margin-bottom:2px;}
+  .mtg-meta{font-size:11px;color:var(--fg-tertiary);display:flex;gap:8px;}
+  .mtg-score{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;}
+  .mtg-score.good{background:rgba(10,132,255,0.15);color:var(--accent);}
+  .mtg-score.great{background:rgba(48,209,88,0.15);color:var(--success);}
+
+  /* Detail */
+  .detail{flex:1;overflow-y:auto;padding:24px 28px;}
+  .detail-header{margin-bottom:20px;}
+  .detail-header h1{font-size:22px;font-weight:700;color:var(--fg-primary);margin-bottom:4px;}
+  .detail-meta{font-size:13px;color:var(--fg-secondary);display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+  .detail-meta i{font-size:13px;}
+
+  .participants{display:flex;gap:8px;margin-bottom:20px;}
+  .participant{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;
+    background:var(--bg-secondary);border-radius:20px;font-size:12px;color:var(--fg-secondary);}
+  .participant-avatar{width:22px;height:22px;border-radius:50%;background:var(--bg-tertiary);
+    display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--fg-secondary);}
+
+  /* Tabs */
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--separator);margin-bottom:20px;}
+  .tab{padding:8px 16px;font-size:13px;color:var(--fg-tertiary);cursor:pointer;
+    border-bottom:2px solid transparent;transition:all 0.15s;font-weight:500;}
+  .tab:hover{color:var(--fg-secondary);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  /* Content sections */
+  .section{margin-bottom:20px;}
+  .section-title{font-size:12px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;
+    letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .section-title i{font-size:12px;}
+
+  .decision-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;
+    border-bottom:0.5px solid var(--separator);}
+  .decision-item:last-child{border-bottom:none;}
+  .decision-dot{width:6px;height:6px;border-radius:50%;background:var(--success);margin-top:7px;flex-shrink:0;}
+  .decision-text{font-size:14px;color:var(--fg-primary);line-height:1.4;}
+
+  .action-item{display:flex;align-items:center;gap:10px;padding:8px 0;
+    border-bottom:0.5px solid var(--separator);}
+  .action-item:last-child{border-bottom:none;}
+  .action-check{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--fg-tertiary);flex-shrink:0;}
+  .action-content{flex:1;}
+  .action-title{font-size:14px;color:var(--fg-primary);}
+  .action-meta{font-size:11px;color:var(--fg-tertiary);margin-top:1px;}
+  .action-due{font-size:12px;font-weight:500;flex-shrink:0;}
+  .action-due.upcoming{color:var(--fg-tertiary);}
+
+  .promise-item{display:flex;align-items:center;gap:10px;padding:8px 0;
+    border-bottom:0.5px solid var(--separator);}
+  .promise-item:last-child{border-bottom:none;}
+  .promise-dot{width:6px;height:6px;border-radius:50%;background:var(--fg-tertiary);margin-top:0;flex-shrink:0;}
+  .promise-text{font-size:14px;color:var(--fg-primary);flex:1;}
+  .promise-text strong{font-weight:500;}
+  .promise-due{font-size:12px;color:var(--fg-tertiary);flex-shrink:0;}
+
+  .play-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+    background:var(--bg-secondary);border:1px solid var(--separator);border-radius:8px;
+    color:var(--fg-secondary);font-size:12px;cursor:pointer;font-family:inherit;transition:background 0.15s;}
+  .play-btn:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .play-btn i{font-size:14px;}
+
+  ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--fg-tertiary);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="win" id="app">
+  <div class="tb">
+    <div class="tl-g"><div class="tl tl-c"></div><div class="tl tl-m"></div><div class="tl tl-x"></div></div>
+    <div class="tb-c">SudoBrain</div>
+    <div class="tb-a">
+      <button class="tb-b"><i class="ph-light ph-record"></i></button>
+      <button class="tb-b"><i class="ph-light ph-magnifying-glass"></i></button>
+      <button class="tb-b" onclick="document.getElementById('app').classList.toggle('light')"><i class="ph-light ph-sun-dim"></i></button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sb">
+      <div class="sb-s">
+        <div class="si"><i class="ph-light ph-calendar-check"></i> Today</div>
+        <div class="si"><i class="ph-light ph-chat-circle"></i> Chat</div>
+        <div class="si"><i class="ph-light ph-tray"></i> Inbox</div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Knowledge</div>
+        <div class="si a"><i class="ph-light ph-users-three"></i> Meetings</div>
+        <div class="si"><i class="ph-light ph-user-circle"></i> People</div>
+        <div class="si"><i class="ph-light ph-git-branch"></i> Decisions</div>
+        <div class="si"><i class="ph-light ph-check-circle"></i> Tasks</div>
+      </div>
+      <div class="sb-sp"></div>
+      <div class="si"><i class="ph-light ph-gear-six"></i> Settings</div>
+    </div>
+
+    <!-- Meeting List -->
+    <div class="mtg-list">
+      <div class="mtg-list-header">This Week</div>
+      <div class="mtg-item active">
+        <div class="mtg-title">Sprint Planning</div>
+        <div class="mtg-meta">Today, 10:00 <span class="mtg-score good">72</span></div>
+      </div>
+      <div class="mtg-item">
+        <div class="mtg-title">Client X — Quarterly Review</div>
+        <div class="mtg-meta">Today, 14:00</div>
+      </div>
+      <div class="mtg-item">
+        <div class="mtg-title">1:1 with Alex</div>
+        <div class="mtg-meta">Today, 16:00</div>
+      </div>
+      <div class="mtg-list-header">Last Week</div>
+      <div class="mtg-item">
+        <div class="mtg-title">Architecture Review</div>
+        <div class="mtg-meta">Mar 28 <span class="mtg-score great">85</span></div>
+      </div>
+      <div class="mtg-item">
+        <div class="mtg-title">Team Standup</div>
+        <div class="mtg-meta">Mar 28 <span class="mtg-score good">68</span></div>
+      </div>
+      <div class="mtg-item">
+        <div class="mtg-title">Design Review</div>
+        <div class="mtg-meta">Mar 27 <span class="mtg-score great">81</span></div>
+      </div>
+    </div>
+
+    <!-- Meeting Detail -->
+    <div class="detail">
+      <div class="detail-header">
+        <h1>Sprint Planning</h1>
+        <div class="detail-meta">
+          <span><i class="ph-light ph-calendar-blank"></i> March 31, 2026</span>
+          <span><i class="ph-light ph-clock"></i> 45 min</span>
+          <span class="mtg-score good" style="font-size:12px;">Score: 72 / 100</span>
+          <button class="play-btn"><i class="ph-light ph-play"></i> Play Audio</button>
+        </div>
+      </div>
+
+      <div class="participants">
+        <div class="participant"><div class="participant-avatar">A</div> Alex</div>
+        <div class="participant"><div class="participant-avatar">R</div> Alex</div>
+        <div class="participant"><div class="participant-avatar">P</div> Maya</div>
+        <div class="participant"><div class="participant-avatar">V</div> Vikram</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">Summary</div>
+        <div class="tab">Transcript</div>
+        <div class="tab">Action Items</div>
+        <div class="tab">Audio</div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><i class="ph-light ph-git-branch"></i> Decisions (3)</div>
+        <div class="decision-item">
+          <div class="decision-dot"></div>
+          <div class="decision-text">Session timeout policy set to 7 days</div>
+        </div>
+        <div class="decision-item">
+          <div class="decision-dot"></div>
+          <div class="decision-text">Dashboard layout: Card-based design (Option B selected)</div>
+        </div>
+        <div class="decision-item">
+          <div class="decision-dot"></div>
+          <div class="decision-text">Demo date confirmed: April 4, 2026</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><i class="ph-light ph-check-circle"></i> Action Items (5)</div>
+        <div class="action-item">
+          <div class="action-check"></div>
+          <div class="action-content">
+            <div class="action-title">Review session timeout policy to 7 days</div>
+            <div class="action-meta">Alex</div>
+          </div>
+          <div class="action-due upcoming">Apr 2</div>
+        </div>
+        <div class="action-item">
+          <div class="action-check"></div>
+          <div class="action-content">
+            <div class="action-title">Finalize mockups with Option B layout</div>
+            <div class="action-meta">Maya</div>
+          </div>
+          <div class="action-due upcoming">Apr 2</div>
+        </div>
+        <div class="action-item">
+          <div class="action-check"></div>
+          <div class="action-content">
+            <div class="action-title">Prepare demo data seeding script</div>
+            <div class="action-meta">Alex</div>
+          </div>
+          <div class="action-due upcoming">Apr 3</div>
+        </div>
+        <div class="action-item">
+          <div class="action-check"></div>
+          <div class="action-content">
+            <div class="action-title">Write demo walkthrough script</div>
+            <div class="action-meta">Vikram</div>
+          </div>
+          <div class="action-due upcoming">Apr 3</div>
+        </div>
+        <div class="action-item">
+          <div class="action-check"></div>
+          <div class="action-content">
+            <div class="action-title">Schedule dry run before demo</div>
+            <div class="action-meta">Alex</div>
+          </div>
+          <div class="action-due upcoming">Apr 3</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><i class="ph-light ph-handshake"></i> Promises (1)</div>
+        <div class="promise-item">
+          <div class="promise-dot"></div>
+          <div class="promise-text"><strong>Alex:</strong> "I'll have auth done by Friday"</div>
+          <div class="promise-due">Due Apr 4</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

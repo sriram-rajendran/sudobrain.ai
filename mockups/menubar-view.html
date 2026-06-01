@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SudoBrain — Menu Bar</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root{--bg-primary:#1C1C1E;--bg-secondary:#2C2C2E;--bg-tertiary:#3A3A3C;
+    --fg-primary:#FFFFFF;--fg-secondary:rgba(235,235,245,0.6);--fg-tertiary:rgba(235,235,245,0.3);
+    --separator:rgba(235,235,245,0.08);--accent:#0A84FF;--accent-dim:rgba(10,132,255,0.15);
+    --warning:#FF9F0A;--success:#30D158;--error:#FF453A;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+    background:#0D0D0D;display:flex;justify-content:center;align-items:flex-start;
+    min-height:100vh;padding:60px 40px;color:var(--fg-primary);-webkit-font-smoothing:antialiased;}
+
+  .menubar-strip{width:100%;height:28px;background:rgba(40,40,40,0.9);position:fixed;top:0;left:0;
+    display:flex;align-items:center;justify-content:flex-end;padding:0 16px;gap:16px;
+    font-size:12px;color:var(--fg-secondary);backdrop-filter:blur(20px);z-index:10;}
+  .menubar-icon{display:flex;align-items:center;gap:4px;cursor:pointer;padding:2px 6px;border-radius:4px;}
+  .menubar-icon:hover{background:rgba(255,255,255,0.1);}
+  .menubar-icon i{font-size:14px;}
+  .menubar-icon.recording i{color:var(--error);}
+
+  /* Popover */
+  .popover{width:320px;background:var(--bg-primary);border-radius:10px;overflow:hidden;
+    box-shadow:0 12px 40px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);margin-top:40px;}
+
+  .pop-header{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;}
+  .pop-header h3{font-size:14px;font-weight:600;color:var(--fg-primary);}
+  .pop-status{font-size:11px;color:var(--fg-tertiary);display:flex;align-items:center;gap:4px;}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:var(--success);}
+
+  .pop-section{padding:8px 16px;border-top:0.5px solid var(--separator);}
+  .pop-label{font-size:10px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+
+  /* Mode selector */
+  .mode-row{display:flex;gap:6px;margin-bottom:8px;}
+  .mode-btn{flex:1;padding:6px;text-align:center;font-size:12px;color:var(--fg-secondary);
+    background:var(--bg-secondary);border:1px solid var(--separator);border-radius:6px;
+    cursor:pointer;font-family:inherit;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:4px;}
+  .mode-btn:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .mode-btn.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent);}
+  .mode-btn i{font-size:12px;}
+
+  /* Record button */
+  .rec-btn{width:100%;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:500;
+    cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;}
+  .rec-btn.start{background:var(--accent);color:white;}
+  .rec-btn.start:hover{opacity:0.9;}
+  .rec-btn.stop{background:var(--error);color:white;}
+  .rec-btn i{font-size:14px;}
+
+  /* Recording state */
+  .rec-state{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .rec-timer{font-size:20px;font-weight:600;color:var(--error);font-variant-numeric:tabular-nums;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+  .rec-dot{width:8px;height:8px;border-radius:50%;background:var(--error);animation:pulse 1.5s ease-in-out infinite;}
+  .level-bar{height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;margin-bottom:8px;}
+  .level-fill{height:100%;background:var(--success);border-radius:2px;width:35%;transition:width 0.1s;}
+
+  /* Quick info */
+  .quick-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;}
+  .quick-item i{font-size:12px;color:var(--fg-tertiary);}
+  .quick-item .label{color:var(--fg-secondary);flex:1;}
+  .quick-item .value{color:var(--fg-primary);font-weight:500;}
+  .quick-item .value.warn{color:var(--warning);}
+
+  /* Bottom actions */
+  .pop-footer{padding:10px 16px;border-top:0.5px solid var(--separator);display:flex;justify-content:space-between;}
+  .pop-link{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:inherit;}
+  .pop-link:hover{text-decoration:underline;}
+  .pop-link.quit{color:var(--fg-tertiary);}
+
+  /* Quick capture */
+  .capture-panel{width:500px;margin-top:40px;background:var(--bg-primary);border-radius:10px;overflow:hidden;
+    box-shadow:0 12px 40px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);}
+  .capture-input{width:100%;background:transparent;border:none;padding:14px 16px;font-size:15px;
+    color:var(--fg-primary);font-family:inherit;outline:none;}
+  .capture-input::placeholder{color:var(--fg-tertiary);}
+  .capture-hint{padding:0 16px 10px;font-size:11px;color:var(--fg-tertiary);display:flex;justify-content:space-between;}
+
+  .container{display:flex;gap:40px;align-items:flex-start;}
+  .panel-label{font-size:11px;color:var(--fg-tertiary);margin-bottom:8px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="menubar-strip">
+  <span style="margin-right:auto;font-weight:500;">SudoBrain Menu Bar Mockup</span>
+  <div class="menubar-icon"><i class="ph-light ph-wifi-high"></i></div>
+  <div class="menubar-icon"><i class="ph-light ph-battery-full"></i></div>
+  <div class="menubar-icon recording"><i class="ph-light ph-brain"></i></div>
+  <span>Mon 10:00 AM</span>
+</div>
+
+<div class="container">
+  <!-- Menu Bar Popover — Idle State -->
+  <div>
+    <div class="panel-label">Idle State</div>
+    <div class="popover">
+      <div class="pop-header">
+        <h3>SudoBrain</h3>
+        <div class="pop-status"><div class="status-dot"></div> Ready</div>
+      </div>
+
+      <div class="pop-section">
+        <div class="pop-label">Recording Mode</div>
+        <div class="mode-row">
+          <button class="mode-btn active"><i class="ph-light ph-microphone"></i> Voice Note</button>
+          <button class="mode-btn"><i class="ph-light ph-users-three"></i> Meeting</button>
+        </div>
+        <button class="rec-btn start"><i class="ph-light ph-record"></i> Start Recording</button>
+      </div>
+
+      <div class="pop-section">
+        <div class="pop-label">At a Glance</div>
+        <div class="quick-item"><i class="ph-light ph-calendar-blank"></i><span class="label">Next meeting</span><span class="value">Sprint Planning in 2h</span></div>
+        <div class="quick-item"><i class="ph-light ph-check-circle"></i><span class="label">Tasks due today</span><span class="value">3</span></div>
+        <div class="quick-item"><i class="ph-light ph-warning"></i><span class="label">Overdue promises</span><span class="value warn">2</span></div>
+      </div>
+
+      <div class="pop-footer">
+        <button class="pop-link">Open SudoBrain</button>
+        <button class="pop-link quit">Quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu Bar Popover — Recording State -->
+  <div>
+    <div class="panel-label">Recording State</div>
+    <div class="popover">
+      <div class="pop-header">
+        <h3>SudoBrain</h3>
+        <div class="pop-status"><div class="rec-dot"></div> Recording</div>
+      </div>
+
+      <div class="pop-section">
+        <div class="rec-state">
+          <span class="rec-timer">03:42.8</span>
+          <span style="font-size:12px;color:var(--fg-tertiary);">Voice Note</span>
+        </div>
+        <div class="level-bar"><div class="level-fill"></div></div>
+        <button class="rec-btn stop"><i class="ph-light ph-stop"></i> Stop Recording</button>
+      </div>
+
+      <div class="pop-section">
+        <div class="pop-label">At a Glance</div>
+        <div class="quick-item"><i class="ph-light ph-calendar-blank"></i><span class="label">Next meeting</span><span class="value">Sprint Planning in 2h</span></div>
+      </div>
+
+      <div class="pop-footer">
+        <button class="pop-link">Open SudoBrain</button>
+        <button class="pop-link quit">Quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Capture Panel -->
+  <div>
+    <div class="panel-label">Quick Capture (Cmd+Shift+Space)</div>
+    <div class="capture-panel">
+      <input class="capture-input" type="text" placeholder="Capture a thought, task, or idea..." autofocus>
+      <div class="capture-hint">
+        <span>Prefix: todo: / remind: / idea: / spent: / note:</span>
+        <span>Esc to dismiss</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

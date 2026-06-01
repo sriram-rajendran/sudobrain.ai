@@ -1,0 +1,4 @@
+[allowlist]
+description = "Allow documented local-only sample service auth in env template."
+paths = ['''^\.env\.example$''']
+regexes = ['''NEO4J_AUTH=neo4j/sudobrain''']

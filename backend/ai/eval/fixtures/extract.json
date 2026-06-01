@@ -1,0 +1,39 @@
+{
+  "examples": [
+    {
+      "transcript": "Alex: Okay so for the v2 launch, Maya is going to own the migration script and have a draft by Friday. I'll handle the customer comms. We agreed to push the public announcement to next Tuesday because legal still needs to review the privacy update.",
+      "expected": {
+        "action_items": [
+          {"owner": "Maya", "task": "draft migration script", "due": "Friday"},
+          {"owner": "Alex", "task": "handle customer comms"}
+        ],
+        "decisions": ["Push public announcement to next Tuesday"],
+        "people": ["Alex", "Maya"],
+        "blockers": ["Legal review of privacy update"]
+      }
+    },
+    {
+      "transcript": "Maya: The dashboard latency issue is back. I think it's the new caching layer. Let's revert it for now and Jordan can investigate root cause tomorrow. Also, we need to update the status page — Alex, can you do that right after this call?",
+      "expected": {
+        "action_items": [
+          {"owner": "Jordan", "task": "investigate caching root cause", "due": "tomorrow"},
+          {"owner": "Alex", "task": "update status page", "due": "after call"}
+        ],
+        "decisions": ["Revert the new caching layer"],
+        "people": ["Maya", "Jordan", "Alex"],
+        "blockers": []
+      }
+    },
+    {
+      "transcript": "Quick sync. Nina confirmed the Series B paperwork is signed. We're moving the all-hands from Thursday to Friday at 10am. David needs the updated cap table by EOD Wednesday for the investor packet.",
+      "expected": {
+        "action_items": [
+          {"owner": "David", "task": "deliver updated cap table", "due": "EOD Wednesday"}
+        ],
+        "decisions": ["Move all-hands from Thursday to Friday 10am"],
+        "people": ["Nina", "David"],
+        "blockers": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SudoBrain — Your Brain, Supercharged</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ───────── CSS Custom Properties: Dual Theme ───────── */
+    :root {
+      --font-sans: 'Inter', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --max-w: 1120px;
+    }
+
+    /* Dark — "Neural Dark" (default) */
+    [data-theme="dark"] {
+      --bg: #0A0A0F;
+      --bg-alt: #08080C;
+      --surface: #14141F;
+      --surface-hover: #1A1A28;
+      --border: #1E1E2E;
+      --primary: #7C3AED;
+      --primary-hover: #6D28D9;
+      --primary-glow: rgba(124, 58, 237, 0.15);
+      --primary-glow-strong: rgba(124, 58, 237, 0.3);
+      --accent: #06B6D4;
+      --accent-glow: rgba(6, 182, 212, 0.12);
+      --success: #10B981;
+      --text-1: #F0F0F5;
+      --text-2: #8888A0;
+      --text-3: #55556A;
+      --glass-bg: rgba(20, 20, 31, 0.6);
+      --glass-border: rgba(255, 255, 255, 0.06);
+      --nav-bg: rgba(10, 10, 15, 0.8);
+      --grid-color: rgba(124, 58, 237, 0.04);
+      --hero-gradient: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.18), transparent 70%),
+                        radial-gradient(ellipse 50% 40% at 80% 20%, rgba(6,182,212,0.08), transparent 60%);
+      --card-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      --toggle-bg: #1E1E2E;
+      --toggle-icon-active: #F0F0F5;
+      --toggle-icon-inactive: #55556A;
+    }
+
+    /* Light — "Clarity Light" */
+    [data-theme="light"] {
+      --bg: #FAFAFE;
+      --bg-alt: #F5F5FC;
+      --surface: #F0F0F8;
+      --surface-hover: #E8E8F2;
+      --border: #E2E2F0;
+      --primary: #6D28D9;
+      --primary-hover: #5B21B6;
+      --primary-glow: rgba(109, 40, 217, 0.08);
+      --primary-glow-strong: rgba(109, 40, 217, 0.15);
+      --accent: #0891B2;
+      --accent-glow: rgba(8, 145, 178, 0.06);
+      --success: #059669;
+      --text-1: #1A1A2E;
+      --text-2: #64648A;
+      --text-3: #9999B0;
+      --glass-bg: rgba(240, 240, 248, 0.7);
+      --glass-border: rgba(0, 0, 0, 0.06);
+      --nav-bg: rgba(250, 250, 254, 0.85);
+      --grid-color: rgba(109, 40, 217, 0.03);
+      --hero-gradient: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(109,40,217,0.08), transparent 70%),
+                        radial-gradient(ellipse 50% 40% at 80% 20%, rgba(8,145,178,0.05), transparent 60%);
+      --card-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      --toggle-bg: #E2E2F0;
+      --toggle-icon-active: #1A1A2E;
+      --toggle-icon-inactive: #9999B0;
+    }
+
+    /* ───────── Reset & Base ───────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text-1);
+      line-height: 1.6;
+      transition: background var(--transition), color var(--transition);
+      overflow-x: hidden;
+    }
+
+    a { color: var(--primary); text-decoration: none; }
+
+    /* ───────── Background Grid ───────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+      transition: background-image var(--transition);
+    }
+
+    /* ───────── Navigation ───────── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: var(--nav-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition), border-color var(--transition);
+    }
+
+    .nav-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: var(--text-1);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: #fff;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-2);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color var(--transition);
+    }
+
+    .nav-links a:hover { color: var(--text-1); }
+
+    /* ───────── Theme Toggle ───────── */
+    .theme-toggle {
+      width: 56px;
+      height: 30px;
+      background: var(--toggle-bg);
+      border-radius: 15px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      position: relative;
+      transition: background var(--transition), border-color var(--transition);
+      display: flex;
+      align-items: center;
+      padding: 0 5px;
+      justify-content: space-between;
+    }
+
+    .theme-toggle .icon {
+      font-size: 13px;
+      z-index: 1;
+      transition: color var(--transition);
+    }
+
+    [data-theme="dark"] .theme-toggle .icon-sun { color: var(--toggle-icon-inactive); }
+    [data-theme="dark"] .theme-toggle .icon-moon { color: var(--toggle-icon-active); }
+    [data-theme="light"] .theme-toggle .icon-sun { color: var(--toggle-icon-active); }
+    [data-theme="light"] .theme-toggle .icon-moon { color: var(--toggle-icon-inactive); }
+
+    .theme-toggle .slider {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      background: var(--primary);
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform var(--transition), background var(--transition);
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+    }
+
+    [data-theme="light"] .theme-toggle .slider {
+      transform: translateX(26px);
+    }
+
+    /* ───────── Sections ───────── */
+    section {
+      position: relative;
+      z-index: 1;
+      padding: 100px 32px;
+    }
+
+    .container {
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+
+    /* ───────── Hero ───────── */
+    .hero {
+      padding-top: 160px;
+      padding-bottom: 120px;
+      text-align: center;
+      background: var(--hero-gradient);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--primary-glow);
+      border: 1px solid rgba(124, 58, 237, 0.2);
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--primary);
+      margin-bottom: 28px;
+    }
+
+    .hero-badge .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.8rem, 6vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-2);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: all var(--transition);
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--primary-glow-strong);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--primary-glow-strong);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text-1);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--surface-hover);
+      transform: translateY(-2px);
+    }
+
+    /* ───────── App Preview ───────── */
+    .app-preview {
+      margin-top: 64px;
+      position: relative;
+    }
+
+    .app-window {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--card-shadow), 0 0 80px var(--primary-glow);
+      transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+    }
+
+    .app-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .app-titlebar .dot-r { width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; }
+    .app-titlebar .dot-y { width: 12px; height: 12px; border-radius: 50%; background: #FFBD2E; }
+    .app-titlebar .dot-g { width: 12px; height: 12px; border-radius: 50%; background: #28CA41; }
+    .app-titlebar span { margin-left: 8px; font-size: 0.8rem; color: var(--text-3); font-weight: 500; }
+
+    .app-body {
+      padding: 24px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-2);
+      min-height: 200px;
+    }
+
+    .app-body .line {
+      margin-bottom: 8px;
+      opacity: 0;
+      animation: typeLine 0.4s forwards;
+    }
+
+    .app-body .line:nth-child(1) { animation-delay: 0.3s; }
+    .app-body .line:nth-child(2) { animation-delay: 0.8s; }
+    .app-body .line:nth-child(3) { animation-delay: 1.3s; }
+    .app-body .line:nth-child(4) { animation-delay: 1.8s; }
+    .app-body .line:nth-child(5) { animation-delay: 2.3s; }
+    .app-body .line:nth-child(6) { animation-delay: 2.8s; }
+
+    @keyframes typeLine {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .app-body .highlight { color: var(--primary); }
+    .app-body .accent { color: var(--accent); }
+    .app-body .green { color: var(--success); }
+    .app-body .dim { color: var(--text-3); }
+
+    /* ───────── Section Headers ───────── */
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      margin-bottom: 16px;
+    }
+
+    .section-label::before {
+      content: '';
+      width: 20px;
+      height: 2px;
+      background: var(--primary);
+      border-radius: 1px;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+
+    .section-desc {
+      font-size: 1.1rem;
+      color: var(--text-2);
+      max-width: 520px;
+      line-height: 1.7;
+    }
+
+    /* ───────── Pillars / Features ───────── */
+    .pillars {
+      background: var(--bg-alt);
+    }
+
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 56px;
+    }
+
+    .pillar-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      transition: all var(--transition);
+      cursor: default;
+    }
+
+    .pillar-card:hover {
+      background: var(--surface-hover);
+      border-color: var(--border);
+      transform: translateY(-4px);
+      box-shadow: var(--card-shadow);
+    }
+
+    .pillar-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+
+    .pillar-icon.ears { background: rgba(124, 58, 237, 0.12); }
+    .pillar-icon.eyes { background: rgba(6, 182, 212, 0.12); }
+    .pillar-icon.brain { background: rgba(236, 72, 153, 0.12); }
+    .pillar-icon.memory { background: rgba(16, 185, 129, 0.12); }
+    .pillar-icon.mouth { background: rgba(251, 146, 60, 0.12); }
+    .pillar-icon.hands { background: rgba(59, 130, 246, 0.12); }
+
+    .pillar-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .pillar-card p {
+      font-size: 0.92rem;
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    /* ───────── How It Works ───────── */
+    .how-it-works-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      margin-top: 56px;
+    }
+
+    .step {
+      text-align: center;
+      position: relative;
+    }
+
+    .step-number {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 20px;
+      background: var(--primary-glow);
+      border: 2px solid rgba(124, 58, 237, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .step h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .step p {
+      font-size: 0.9rem;
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    .step-connector {
+      display: none;
+    }
+
+    /* ───────── Principles ───────── */
+    .principles {
+      background: var(--bg-alt);
+    }
+
+    .principles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 56px;
+    }
+
+    .principle {
+      padding: 28px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: all var(--transition);
+    }
+
+    .principle:hover {
+      border-color: var(--primary);
+      box-shadow: 0 0 24px var(--primary-glow);
+    }
+
+    .principle-icon {
+      font-size: 1.6rem;
+      margin-bottom: 16px;
+    }
+
+    .principle h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .principle p {
+      font-size: 0.88rem;
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    /* ───────── CTA ───────── */
+    .cta {
+      text-align: center;
+    }
+
+    .cta-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 72px 48px;
+      position: relative;
+      overflow: hidden;
+      transition: background var(--transition), border-color var(--transition);
+    }
+
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, var(--primary-glow), transparent 70%);
+      pointer-events: none;
+    }
+
+    .cta-box h2 {
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .cta-box p {
+      color: var(--text-2);
+      font-size: 1.05rem;
+      margin-bottom: 32px;
+      position: relative;
+    }
+
+    .cta-form {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      position: relative;
+    }
+
+    .cta-form input {
+      padding: 14px 20px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text-1);
+      font-size: 0.95rem;
+      font-family: var(--font-sans);
+      width: 300px;
+      outline: none;
+      transition: border-color var(--transition), background var(--transition);
+    }
+
+    .cta-form input:focus {
+      border-color: var(--primary);
+    }
+
+    .cta-form input::placeholder {
+      color: var(--text-3);
+    }
+
+    .cta-platform {
+      margin-top: 20px;
+      font-size: 0.85rem;
+      color: var(--text-3);
+      position: relative;
+    }
+
+    /* ───────── Footer ───────── */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      padding: 40px 32px;
+      transition: border-color var(--transition);
+    }
+
+    .footer-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-left {
+      font-size: 0.88rem;
+      color: var(--text-3);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 0.85rem;
+      color: var(--text-3);
+      transition: color var(--transition);
+    }
+
+    .footer-links a:hover { color: var(--text-1); }
+
+    /* ───────── Responsive ───────── */
+    @media (max-width: 768px) {
+      .pillars-grid,
+      .how-it-works-steps,
+      .principles-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-links { display: none; }
+      .hero { padding-top: 120px; padding-bottom: 80px; }
+      section { padding: 64px 20px; }
+      .cta-box { padding: 48px 24px; }
+      .cta-form input { width: 100%; }
+      .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .pillars-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ───────── Scroll Animations ───────── */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════ Navigation ═══════ -->
+  <nav>
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        SudoBrain
+      </div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#principles">Principles</a></li>
+        <li>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+            <span class="icon icon-sun">&#9728;</span>
+            <span class="icon icon-moon">&#9790;</span>
+            <div class="slider"></div>
+          </button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ═══════ Hero ═══════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        Built for macOS
+      </div>
+      <h1>
+        Your Brain,<br />
+        <span class="gradient-text">Supercharged.</span>
+      </h1>
+      <p>
+        A personal AI operating system that lives in your menu bar.
+        It listens, remembers, thinks, and acts — so you never lose a thought again.
+      </p>
+      <div class="hero-buttons">
+        <button class="btn btn-primary">
+          Join the Waitlist &rarr;
+        </button>
+        <button class="btn btn-secondary">
+          See How It Works
+        </button>
+      </div>
+
+      <!-- App Preview -->
+      <div class="app-preview">
+        <div class="app-window">
+          <div class="app-titlebar">
+            <div class="dot-r"></div>
+            <div class="dot-y"></div>
+            <div class="dot-g"></div>
+            <span>SudoBrain</span>
+          </div>
+          <div class="app-body">
+            <div class="line"><span class="dim">$</span> <span class="highlight">sudobrain</span> listen <span class="dim">--mode=meeting</span></div>
+            <div class="line"><span class="green">&#10003;</span> Recording from local microphone</div>
+            <div class="line"><span class="green">&#10003;</span> Transcribing with <span class="accent">Sarvam AI</span> <span class="dim">(Tamil + English)</span></div>
+            <div class="line"><span class="green">&#10003;</span> Extracted: <span class="highlight">3 action items</span>, <span class="highlight">2 decisions</span>, <span class="highlight">1 promise</span></div>
+            <div class="line"><span class="green">&#10003;</span> Knowledge graph updated <span class="dim">(+12 nodes)</span></div>
+            <div class="line"><span class="dim">$</span> <span class="accent">Ready.</span> Your brain never forgets. <span class="blink">&#9646;</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Features / Pillars ═══════ -->
+  <section class="pillars" id="features">
+    <div class="container">
+      <div class="section-label">Core Pillars</div>
+      <h2 class="section-title">Six senses. One brain.</h2>
+      <p class="section-desc">
+        SudoBrain extends your cognitive capabilities across six intelligent pillars, working together as one unified system.
+      </p>
+
+      <div class="pillars-grid">
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon ears">&#128066;</div>
+          <h3>Ears — Capture</h3>
+          <p>Records meetings, voice notes, and system audio. Transcribes Tamil, English, and code-mixed speech with Sarvam AI.</p>
+        </div>
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon eyes">&#128065;</div>
+          <h3>Eyes — Context</h3>
+          <p>Sees your active app, calendar, focus mode, and time of day. Knows when to help and when to stay silent.</p>
+        </div>
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon brain">&#129504;</div>
+          <h3>Brain — Understanding</h3>
+          <p>Extracts decisions, action items, people, and promises from everything you capture. Connects the dots automatically.</p>
+        </div>
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon memory">&#128190;</div>
+          <h3>Memory — Knowledge</h3>
+          <p>Temporal knowledge graph with semantic search. Your personal Wikipedia that grows smarter every day.</p>
+        </div>
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon mouth">&#128172;</div>
+          <h3>Mouth — Communication</h3>
+          <p>Morning briefings, meeting prep, proactive alerts. Speaks up when something important needs your attention.</p>
+        </div>
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon hands">&#9997;&#65039;</div>
+          <h3>Hands — Actions</h3>
+          <p>Drafts follow-ups, prepares calendar notes, and keeps reminders local. Turns thoughts into actions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ How It Works ═══════ -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="section-label">How It Works</div>
+      <h2 class="section-title">Three steps. Zero friction.</h2>
+      <p class="section-desc">
+        SudoBrain runs quietly in your menu bar, always ready but never intrusive.
+      </p>
+
+      <div class="how-it-works-steps">
+        <div class="step fade-up">
+          <div class="step-number">1</div>
+          <h3>Capture Everything</h3>
+          <p>Click the menu bar icon to start recording. SudoBrain captures audio, clipboard, and screen context in the background.</p>
+        </div>
+        <div class="step fade-up">
+          <div class="step-number">2</div>
+          <h3>AI Processes It</h3>
+          <p>Your local AI engine transcribes, extracts insights, and builds your knowledge graph — all on your machine.</p>
+        </div>
+        <div class="step fade-up">
+          <div class="step-number">3</div>
+          <h3>Act on Insights</h3>
+          <p>Get briefings, search your memory, and let SudoBrain handle follow-ups, reminders, and messages automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Principles ═══════ -->
+  <section class="principles" id="principles">
+    <div class="container">
+      <div class="section-label">Built Different</div>
+      <h2 class="section-title">Your data. Your machine. Your rules.</h2>
+      <p class="section-desc">
+        SudoBrain is designed around principles that put you in control.
+      </p>
+
+      <div class="principles-grid">
+        <div class="principle fade-up">
+          <div class="principle-icon">&#128274;</div>
+          <h3>Local-First</h3>
+          <p>All data stays on your Mac. No cloud storage, no external servers. Your thoughts never leave your machine.</p>
+        </div>
+        <div class="principle fade-up">
+          <div class="principle-icon">&#9889;</div>
+          <h3>Zero Latency</h3>
+          <p>Menu bar native. One click to start, instant access to your entire knowledge base and AI capabilities.</p>
+        </div>
+        <div class="principle fade-up">
+          <div class="principle-icon">&#129302;</div>
+          <h3>Proactive Intelligence</h3>
+          <p>Doesn't wait to be asked. Surfaces relevant context before meetings, catches forgotten promises, and alerts you to what matters.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ CTA ═══════ -->
+  <section class="cta" id="waitlist">
+    <div class="container">
+      <div class="cta-box">
+        <h2>Ready to supercharge your brain?</h2>
+        <p>Join the waitlist and be first to know when SudoBrain launches.</p>
+        <div class="cta-form">
+          <input type="email" placeholder="your@email.com" />
+          <button class="btn btn-primary">Join Waitlist &rarr;</button>
+        </div>
+        <p class="cta-platform">&#63743; Available for macOS Ventura and later</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Footer ═══════ -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-left">&copy; 2026 SudoBrain contributors.</div>
+      <ul class="footer-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#principles">Principles</a></li>
+        <li><a href="https://github.com" target="_blank">GitHub</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <!-- ═══════ Scripts ═══════ -->
+  <script>
+    // Theme toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('sudobrain-theme', next);
+    }
+
+    // Restore saved theme
+    const saved = localStorage.getItem('sudobrain-theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+
+    // Scroll animations
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    document.querySelectorAll('.fade-up').forEach((el) => observer.observe(el));
+  </script>
+
+</body>
+</html>

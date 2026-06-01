@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SudoBrain — Today View</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root {
+    --bg-primary: #1C1C1E;
+    --bg-secondary: #2C2C2E;
+    --bg-tertiary: #3A3A3C;
+    --bg-elevated: #48484A;
+    --fg-primary: #FFFFFF;
+    --fg-secondary: rgba(235, 235, 245, 0.6);
+    --fg-tertiary: rgba(235, 235, 245, 0.3);
+    --separator: rgba(235, 235, 245, 0.08);
+    --accent: #0A84FF;
+    --accent-dim: rgba(10, 132, 255, 0.15);
+    --recording: #FF453A;
+    --success: #30D158;
+    --warning: #FF9F0A;
+    --error: #FF453A;
+    --info: #64D2FF;
+    --sidebar-width: 220px;
+    --radius-card: 12px;
+    --radius-button: 8px;
+    --radius-badge: 6px;
+    --radius-sidebar: 8px;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 20px;
+    --space-2xl: 24px;
+    --space-3xl: 32px;
+  }
+
+  .light {
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F2F2F7;
+    --bg-tertiary: #E5E5EA;
+    --bg-elevated: #FFFFFF;
+    --fg-primary: #000000;
+    --fg-secondary: rgba(60, 60, 67, 0.6);
+    --fg-tertiary: rgba(60, 60, 67, 0.3);
+    --separator: rgba(60, 60, 67, 0.08);
+    --accent: #007AFF;
+    --accent-dim: rgba(0, 122, 255, 0.1);
+    --success: #34C759;
+    --warning: #FF9500;
+    --error: #FF3B30;
+    --info: #5AC8FA;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+    background: #0D0D0D;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px;
+    color: var(--fg-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .macos-window {
+    width: 1100px;
+    height: 720px;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+  }
+
+  /* ── Titlebar ── */
+  .titlebar {
+    height: 52px;
+    background: var(--bg-secondary);
+    border-bottom: 0.5px solid var(--separator);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    flex-shrink: 0;
+  }
+  .traffic-lights { display: flex; gap: 8px; }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl-close { background: #FF5F57; }
+  .tl-min { background: #FEBC2E; }
+  .tl-max { background: #28C840; }
+  .titlebar-center {
+    flex: 1; text-align: center;
+    font-size: 13px; font-weight: 600; color: var(--fg-secondary);
+  }
+  .titlebar-actions { display: flex; gap: 4px; align-items: center; }
+  .tb-btn {
+    background: none; border: none; color: var(--fg-secondary);
+    cursor: pointer; padding: 6px 8px; border-radius: var(--radius-button);
+    transition: background 0.15s; display: flex; align-items: center; gap: 5px;
+    font-size: 12px; font-family: inherit;
+  }
+  .tb-btn:hover { background: var(--bg-tertiary); color: var(--fg-primary); }
+  .tb-btn i { font-size: 14px; }
+
+  /* ── Main Layout ── */
+  .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 0.5px solid var(--separator);
+    padding: var(--space-sm);
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-section { margin-bottom: var(--space-xs); }
+  .sidebar-label {
+    font-size: 11px; font-weight: 600; color: var(--fg-tertiary);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: var(--space-sm) var(--space-md) var(--space-xs);
+  }
+  .sb-item {
+    display: flex; align-items: center; gap: var(--space-sm);
+    padding: 7px var(--space-md); border-radius: var(--radius-sidebar);
+    cursor: pointer; font-size: 13px; color: var(--fg-secondary);
+    transition: all 0.15s; position: relative;
+  }
+  .sb-item:hover { background: var(--bg-tertiary); color: var(--fg-primary); }
+  .sb-item.active { background: var(--accent-dim); color: var(--accent); }
+  .sb-item i { font-size: 15px; flex-shrink: 0; width: 18px; text-align: center; }
+  .sb-item .badge {
+    position: absolute; right: 8px;
+    background: var(--accent); color: white;
+    font-size: 10px; font-weight: 600;
+    padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center;
+  }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-shortcut {
+    padding: var(--space-sm) var(--space-md);
+    font-size: 11px; color: var(--fg-tertiary);
+    display: flex; align-items: center; gap: var(--space-sm);
+  }
+  .kbd {
+    background: var(--bg-tertiary); padding: 1px 5px;
+    border-radius: 3px; font-size: 10px;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    flex: 1; overflow-y: auto;
+    padding: var(--space-3xl) var(--space-3xl) var(--space-3xl) var(--space-2xl);
+    max-width: 780px;
+  }
+
+  /* ── Greeting ── */
+  .greeting { margin-bottom: var(--space-2xl); }
+  .greeting h1 {
+    font-size: 28px; font-weight: 700; color: var(--fg-primary);
+    margin-bottom: var(--space-xs); letter-spacing: -0.3px;
+  }
+  .greeting .date { font-size: 15px; color: var(--fg-secondary); }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg-secondary); border-radius: var(--radius-card);
+    padding: var(--space-lg); margin-bottom: var(--space-lg);
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: var(--space-md);
+  }
+  .card-title {
+    font-size: 12px; font-weight: 600; color: var(--fg-secondary);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: var(--space-sm);
+  }
+  .card-title i { font-size: 13px; }
+  .card-action {
+    font-size: 12px; color: var(--accent); cursor: pointer;
+    text-decoration: none; background: none; border: none; font-family: inherit;
+  }
+  .card-action:hover { text-decoration: underline; }
+
+  /* ── Schedule ── */
+  .sch-item {
+    display: flex; gap: var(--space-md);
+    padding: var(--space-md) 0;
+    border-bottom: 0.5px solid var(--separator);
+  }
+  .sch-item:last-child { border-bottom: none; }
+  .sch-time {
+    font-size: 13px; font-weight: 600; color: var(--fg-primary);
+    width: 48px; flex-shrink: 0; font-variant-numeric: tabular-nums;
+  }
+  .sch-content { flex: 1; }
+  .sch-title {
+    font-size: 14px; font-weight: 500; color: var(--fg-primary);
+    margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .sch-dur { font-size: 12px; color: var(--fg-tertiary); font-weight: 400; }
+  .sch-hint {
+    font-size: 12px; color: var(--fg-secondary); margin-top: 2px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .sch-hint.warn { color: var(--warning); }
+  .sch-hint i { font-size: 11px; }
+
+  /* ── Tasks ── */
+  .task-item {
+    display: flex; align-items: center; gap: var(--space-md);
+    padding: 10px 0; border-bottom: 0.5px solid var(--separator);
+  }
+  .task-item:last-child { border-bottom: none; }
+  .task-check {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1.5px solid var(--fg-tertiary); flex-shrink: 0;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .task-check:hover { border-color: var(--accent); }
+  .task-content { flex: 1; }
+  .task-title { font-size: 14px; color: var(--fg-primary); }
+  .task-meta {
+    font-size: 11px; color: var(--fg-tertiary); margin-top: 2px;
+    display: flex; gap: var(--space-sm); align-items: center;
+  }
+  .tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: var(--bg-tertiary); color: var(--fg-secondary);
+  }
+  .task-due { font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .task-due.overdue { color: var(--warning); }
+  .task-due.today { color: var(--accent); }
+  .task-due.upcoming { color: var(--fg-tertiary); }
+
+  /* ── Promises ── */
+  .promise-item {
+    display: flex; align-items: flex-start; gap: var(--space-md);
+    padding: 10px 0; border-bottom: 0.5px solid var(--separator);
+  }
+  .promise-item:last-child { border-bottom: none; }
+  .promise-dot {
+    width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0;
+  }
+  .promise-dot.overdue { background: var(--warning); }
+  .promise-dot.pending { background: var(--fg-tertiary); }
+  .promise-text { font-size: 14px; color: var(--fg-primary); flex: 1; line-height: 1.4; }
+  .promise-text strong { font-weight: 500; }
+  .promise-age { font-size: 12px; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
+  .promise-age.overdue { color: var(--warning); }
+  .promise-age.pending { color: var(--fg-tertiary); }
+
+  /* ── Reminders ── */
+  .rem-item {
+    display: flex; align-items: center; gap: var(--space-md);
+    padding: 8px 0; border-bottom: 0.5px solid var(--separator);
+  }
+  .rem-item:last-child { border-bottom: none; }
+  .rem-item i { font-size: 13px; color: var(--fg-secondary); flex-shrink: 0; }
+  .rem-text { font-size: 14px; color: var(--fg-primary); flex: 1; }
+  .rem-detail { font-size: 12px; flex-shrink: 0; }
+  .rem-detail.overdue { color: var(--warning); }
+  .rem-detail.upcoming { color: var(--fg-secondary); }
+
+  /* ── Insight ── */
+  .insight-card {
+    background: var(--bg-secondary); border-radius: var(--radius-card);
+    padding: var(--space-lg); margin-bottom: var(--space-lg);
+    border-left: 3px solid var(--accent);
+  }
+  .insight-label {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: var(--space-sm); display: flex; align-items: center; gap: 6px;
+  }
+  .insight-label i { font-size: 13px; }
+  .insight-text { font-size: 14px; color: var(--fg-secondary); line-height: 1.5; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--fg-tertiary); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--fg-secondary); }
+</style>
+</head>
+<body>
+<div class="macos-window" id="app">
+  <!-- Titlebar -->
+  <div class="titlebar">
+    <div class="traffic-lights">
+      <div class="tl tl-close"></div>
+      <div class="tl tl-min"></div>
+      <div class="tl tl-max"></div>
+    </div>
+    <div class="titlebar-center">SudoBrain</div>
+    <div class="titlebar-actions">
+      <button class="tb-btn" title="Start Recording"><i class="ph-light ph-record"></i></button>
+      <button class="tb-btn" title="Search"><i class="ph-light ph-magnifying-glass"></i></button>
+      <button class="tb-btn" onclick="toggleTheme()"><i class="ph-light ph-sun-dim"></i></button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sb-item active" onclick="selectItem(this)">
+          <i class="ph-light ph-calendar-check"></i> Today
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-chat-circle"></i> Chat
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-tray"></i> Inbox
+          <span class="badge">3</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Knowledge</div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-users-three"></i> Meetings
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-user-circle"></i> People
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-git-branch"></i> Decisions
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-check-circle"></i> Tasks
+          <span class="badge">5</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Projects</div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-folder-simple"></i> Project Atlas
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-folder-simple"></i> Mobile App
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-folder-simple"></i> Personal
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Personal</div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-chart-bar"></i> Habits
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-currency-inr"></i> Expenses
+        </div>
+        <div class="sb-item" onclick="selectItem(this)">
+          <i class="ph-light ph-lightbulb"></i> Ideas
+        </div>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sb-item" onclick="selectItem(this)">
+        <i class="ph-light ph-gear-six"></i> Settings
+      </div>
+      <div class="sidebar-shortcut">
+        <span class="kbd">&#8984;</span><span class="kbd">K</span> Search everything
+      </div>
+    </div>
+
+    <!-- Content — Today View -->
+    <div class="content-area">
+      <div class="greeting">
+        <h1>Good morning</h1>
+        <div class="date">Monday, March 31, 2026</div>
+      </div>
+
+      <!-- Schedule -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ph-light ph-calendar-blank"></i> Today's Schedule</div>
+          <button class="card-action">See calendar</button>
+        </div>
+        <div class="sch-item">
+          <div class="sch-time">10:00</div>
+          <div class="sch-content">
+            <div class="sch-title">Sprint Planning <span class="sch-dur">45 min</span></div>
+            <div class="sch-hint"><i class="ph-light ph-arrow-right"></i> 3 retro items need your decision</div>
+          </div>
+        </div>
+        <div class="sch-item">
+          <div class="sch-time">14:00</div>
+          <div class="sch-content">
+            <div class="sch-title">Client X — Quarterly Review <span class="sch-dur">60 min</span></div>
+            <div class="sch-hint warn"><i class="ph-light ph-warning"></i> Vikram asked about timeline — no update sent</div>
+          </div>
+        </div>
+        <div class="sch-item">
+          <div class="sch-time">16:00</div>
+          <div class="sch-content">
+            <div class="sch-title">1:1 with Alex <span class="sch-dur">30 min</span></div>
+            <div class="sch-hint"><i class="ph-light ph-arrow-right"></i> His auth task is 2 days overdue</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tasks -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ph-light ph-check-circle"></i> Top Tasks</div>
+          <button class="card-action">See all 12</button>
+        </div>
+        <div class="task-item">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Review Alex's PR #142</div>
+            <div class="task-meta"><span class="tag">Project Atlas</span> Assigned by Alex</div>
+          </div>
+          <div class="task-due today">Due today</div>
+        </div>
+        <div class="task-item">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Send architecture doc to Maya</div>
+            <div class="task-meta"><span class="tag">Project Atlas</span> Promise</div>
+          </div>
+          <div class="task-due overdue">5d overdue</div>
+        </div>
+        <div class="task-item">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Update project timeline for client demo</div>
+            <div class="task-meta"><span class="tag">Client X</span></div>
+          </div>
+          <div class="task-due upcoming">Apr 2</div>
+        </div>
+        <div class="task-item">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Prepare demo data seeding script</div>
+            <div class="task-meta"><span class="tag">Project Atlas</span></div>
+          </div>
+          <div class="task-due upcoming">Apr 3</div>
+        </div>
+      </div>
+
+      <!-- Promises -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ph-light ph-handshake"></i> Open Promises</div>
+          <button class="card-action">See all</button>
+        </div>
+        <div class="promise-item">
+          <div class="promise-dot overdue"></div>
+          <div class="promise-text"><strong>You &rarr; Alex:</strong> Send the architecture document</div>
+          <div class="promise-age overdue">5d overdue</div>
+        </div>
+        <div class="promise-item">
+          <div class="promise-dot overdue"></div>
+          <div class="promise-text"><strong>You &rarr; Maya:</strong> Review dashboard mockups</div>
+          <div class="promise-age overdue">3d overdue</div>
+        </div>
+        <div class="promise-item">
+          <div class="promise-dot pending"></div>
+          <div class="promise-text"><strong>Alex &rarr; Team:</strong> Complete session handling update</div>
+          <div class="promise-age pending">Due Fri</div>
+        </div>
+      </div>
+
+      <!-- Reminders -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ph-light ph-bell"></i> Reminders</div>
+        </div>
+        <div class="rem-item">
+          <i class="ph-light ph-phone"></i>
+          <div class="rem-text">Call dentist to schedule appointment</div>
+          <div class="rem-detail overdue">Overdue</div>
+        </div>
+        <div class="rem-item">
+          <i class="ph-light ph-gift"></i>
+          <div class="rem-text">Mom's birthday — she mentioned wanting a Kindle</div>
+          <div class="rem-detail upcoming">In 5 days</div>
+        </div>
+        <div class="rem-item">
+          <i class="ph-light ph-car"></i>
+          <div class="rem-text">Car insurance renewal</div>
+          <div class="rem-detail upcoming">Apr 10</div>
+        </div>
+      </div>
+
+      <!-- Insight -->
+      <div class="insight-card">
+        <div class="insight-label"><i class="ph-light ph-brain"></i> Insight</div>
+        <div class="insight-text">
+          You had 22 hours of meetings last week — up 22% from the week before.
+          Today is lighter with only 2.25 hours scheduled.
+          Good day for deep work on the demo preparation.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function selectItem(el) {
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+function toggleTheme() {
+  document.getElementById('app').classList.toggle('light');
+}
+</script>
+</body>
+</html>

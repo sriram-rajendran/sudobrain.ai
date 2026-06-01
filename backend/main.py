@@ -1,0 +1,2788 @@
+"""SudoBrain backend server — handles audio processing, transcription, and knowledge extraction."""
+
+import json
+import logging
+import os
+import uuid
+import hashlib
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, Query
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+
+from backend.processing.audio_processor import process_audio, mix_meeting_audio
+from backend.transcription.sarvam_client import transcribe_short, transcribe_meeting
+from backend.ai.local_llm_engine import extract_knowledge as local_llm_extract
+from backend.storage import database as db
+
+# ── Logging setup ──
+
+LOG_DIR = os.path.join(os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain")), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[
+        logging.FileHandler(os.path.join(LOG_DIR, "sudobrain.log")),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger("sudobrain")
+
+app = FastAPI(title="SudoBrain", version="0.4.0")
+
+# ── Authentication Middleware ──
+
+API_TOKEN = os.getenv("SUDOBRAIN_API_TOKEN", "")
+
+# Paths that don't require authentication
+PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/fathom/webhook"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Skip auth for public paths
+        if path in PUBLIC_PATHS or not API_TOKEN:
+            return await call_next(request)
+
+        # Check bearer token
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header == f"Bearer {API_TOKEN}":
+            return await call_next(request)
+
+        # Allow localhost without token for Swift app backward compatibility
+        client_host = request.client.host if request.client else ""
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
+
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+
+app.add_middleware(AuthMiddleware)
+
+
+@app.on_event("startup")
+def startup_event():
+    """Start heartbeat scheduler and initialize services."""
+    from backend.heartbeat.engine import start_scheduler
+    start_scheduler()
+    from backend.storage.resilience import check_database_integrity
+    integrity = check_database_integrity()
+    logger.info("DB integrity: %s, %d tables", integrity["integrity"], integrity["tables"])
+
+    # Initialize Neo4j schema if available
+    try:
+        from backend.graph.neo4j_client import init_schema, is_available as neo4j_ok
+        if neo4j_ok():
+            init_schema()
+            logger.info("Neo4j knowledge graph connected")
+        else:
+            logger.info("Neo4j not available — graph features disabled")
+    except Exception as e:
+        logger.warning("Neo4j init skipped: %s", e)
+
+    # Initialize Slack tables
+    try:
+        from backend.slack.schema import init_slack_tables
+        init_slack_tables()
+        logger.info("Slack tables initialized")
+    except Exception as e:
+        logger.warning("Slack init skipped: %s", e)
+
+    # Initialize Gmail tables
+    try:
+        from backend.gmail.ingest import init_gmail_tables
+        init_gmail_tables()
+        logger.info("Gmail tables initialized")
+    except Exception as e:
+        logger.warning("Gmail init skipped: %s", e)
+
+    # Initialize Linear tables
+    try:
+        from backend.linear.ingest import init_linear_tables
+        init_linear_tables()
+        logger.info("Linear tables initialized")
+    except Exception as e:
+        logger.warning("Linear init skipped: %s", e)
+
+    # Detect available Ollama models for routing
+    try:
+        from backend.ai.model_router import _get_available_models
+        models = _get_available_models()
+        logger.info("Ollama models available: %s", sorted(models))
+    except Exception as e:
+        logger.warning("Model router init skipped: %s", e)
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Stop heartbeat scheduler and close connections."""
+    from backend.heartbeat.engine import stop_scheduler
+    stop_scheduler()
+    try:
+        from backend.graph.neo4j_client import close as close_neo4j
+        close_neo4j()
+    except Exception:
+        pass
+
+DATA_DIR = os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain"))
+RECORDINGS_DIR = os.path.join(DATA_DIR, "recordings")
+
+
+def _save_promise(transcript_id: str, item: dict):
+    """Save a promise to the database."""
+    conn = db.get_connection()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS promises (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transcript_id TEXT,
+                promised_by_name TEXT,
+                promised_to_name TEXT,
+                description TEXT NOT NULL,
+                detected_text TEXT,
+                due_date DATE,
+                status TEXT DEFAULT 'pending',
+                reminder_count INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        existing = conn.execute(
+            """
+            SELECT id FROM promises
+            WHERE transcript_id = ?
+              AND LOWER(REGEXP_REPLACE(COALESCE(description, ''), '\\s+', ' ', 'g')) =
+                  LOWER(REGEXP_REPLACE(COALESCE(?, ''), '\\s+', ' ', 'g'))
+              AND COALESCE(LOWER(promised_by_name), '') = COALESCE(LOWER(?), '')
+              AND COALESCE(LOWER(promised_to_name), '') = COALESCE(LOWER(?), '')
+            LIMIT 1
+            """,
+            (
+                transcript_id,
+                item.get("text", ""),
+                item.get("promised_by", ""),
+                item.get("promised_to", ""),
+            ),
+        ).fetchone()
+        if existing:
+            return
+        conn.execute(
+            """INSERT INTO promises (transcript_id, promised_by_name, promised_to_name, description, due_date)
+            VALUES (?, ?, ?, ?, ?)""",
+            (
+                transcript_id,
+                item.get("promised_by", ""),
+                item.get("promised_to", ""),
+                item.get("text", ""),
+                item.get("due_date"),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ── Request/Response Models ──
+
+VALID_MODES = {"voice_note", "meeting", "fathom_meeting"}
+
+
+class ProcessRequest(BaseModel):
+    audio_path: str
+    mode: str = "voice_note"
+    num_speakers: Optional[int] = Field(None, ge=1, le=20)
+
+
+class ProcessResponse(BaseModel):
+    recording_id: str
+    transcript_id: str
+    status: str
+    transcript_preview: str
+    knowledge: Optional[dict] = None
+
+
+class SystemControlRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+@app.get("/health")
+def health():
+    from backend.ai.ollama_engine import is_available as ollama_ok
+    return {"status": "ok", "version": "0.5.0", "ollama": ollama_ok()}
+
+
+@app.get("/ollama/status")
+def ollama_status():
+    """Check Ollama availability and list models."""
+    from backend.ai.ollama_engine import is_available, list_models
+    return {"available": is_available(), "models": list_models()}
+
+
+@app.post("/ollama/classify")
+def ollama_classify(text: str, categories: str):
+    """Classify text using local LLM. Categories as comma-separated string."""
+    from backend.ai.ollama_engine import classify
+    cats = [c.strip() for c in categories.split(",")]
+    return {"category": classify(text, cats)}
+
+
+@app.post("/ollama/summarize")
+def ollama_summarize(text: str, max_words: int = 50):
+    """Summarize text using local LLM."""
+    from backend.ai.ollama_engine import summarize
+    return {"summary": summarize(text, max_words)}
+
+
+# ── Insights Endpoints ──
+
+@app.get("/insights/overview")
+def insights_overview():
+    """Get high-level stats across all data."""
+    from backend.insights.analyzer import get_overview_stats
+    return get_overview_stats()
+
+@app.get("/insights/weekly")
+def insights_weekly():
+    """Get weekly activity breakdown."""
+    from backend.insights.analyzer import get_weekly_activity
+    return get_weekly_activity()
+
+@app.get("/insights/projects")
+def insights_projects():
+    """Get project health scores."""
+    from backend.insights.analyzer import get_project_health
+    return get_project_health()
+
+@app.get("/insights/people")
+def insights_people():
+    """Get people interaction summary."""
+    from backend.insights.analyzer import get_people_interaction_summary
+    return get_people_interaction_summary()
+
+
+# ── Quick Capture ──
+
+class CaptureRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+
+@app.post("/capture")
+def quick_capture(request: CaptureRequest):
+    """Quick capture — auto-classify and route to correct storage.
+
+    Prefixes: todo:, remind:, idea:, spent:, habit:
+    Without prefix: auto-classify via keyword matching.
+    """
+    text = request.text.strip()
+    lower = text.lower()
+
+    import re
+    import time
+
+    def _db_write(sql, params):
+        """Write with retry for locked DB."""
+        for attempt in range(3):
+            try:
+                conn = db.get_connection()
+                try:
+                    conn.execute(sql, params)
+                    conn.commit()
+                finally:
+                    conn.close()
+                return True
+            except Exception as e:
+                logger.warning("DB write retry %d: %s", attempt + 1, e)
+                time.sleep(0.5)
+        logger.error("DB write failed after 3 retries")
+        return False
+
+    if lower.startswith("todo:") or lower.startswith("task:"):
+        task_text = text.split(":", 1)[1].strip()
+        _db_write("INSERT INTO action_items (transcript_id, text, status) VALUES (?, ?, 'pending')", ("manual", task_text))
+        return {"type": "task", "text": task_text}
+
+    elif lower.startswith("idea:"):
+        idea_text = text.split(":", 1)[1].strip()
+        _db_write("INSERT INTO ideas (text, status) VALUES (?, 'parked')", (idea_text,))
+        return {"type": "idea", "text": idea_text}
+
+    elif lower.startswith("spent:") or lower.startswith("expense:"):
+        parts = text.split(":", 1)[1].strip()
+        match = re.match(r'(\d+)\s*(?:on\s+)?(.+)?', parts)
+        if match:
+            amount = float(match.group(1))
+            desc = (match.group(2) or "").strip()
+            _db_write("INSERT INTO expenses (amount, description, date) VALUES (?, ?, date('now'))", (amount, desc))
+            return {"type": "expense", "amount": amount, "description": desc}
+        return {"type": "expense", "error": "Could not parse amount"}
+
+    elif lower.startswith("remind:") or lower.startswith("reminder:"):
+        reminder_text = text.split(":", 1)[1].strip()
+        _db_write("INSERT INTO reminders (transcript_id, text, status) VALUES (?, ?, 'pending')", ("manual", reminder_text))
+        return {"type": "reminder", "text": reminder_text}
+
+    else:
+        _db_write("INSERT INTO ideas (text, category, status) VALUES (?, 'uncategorized', 'parked')", (text,))
+        return {"type": "idea", "text": text, "note": "Auto-classified as idea."}
+
+
+# ── Inbox / Dashboard ──
+
+@app.get("/inbox")
+def inbox():
+    """Get all items needing attention — the unified inbox."""
+    items = []
+
+    conn = db.get_connection()
+    try:
+        unprocessed = conn.execute(
+            "SELECT id, mode, created_at FROM recordings WHERE status NOT IN ('completed', 'failed') ORDER BY created_at DESC"
+        ).fetchall()
+        for r in unprocessed:
+            items.append({"type": "unprocessed_recording", "id": r["id"], "mode": r["mode"], "date": r["created_at"]})
+
+        try:
+            contradictions = conn.execute(
+                "SELECT id, description, severity FROM cross_references WHERE status = 'open' AND type = 'contradiction'"
+            ).fetchall()
+            for c in contradictions:
+                items.append({"type": "contradiction", "id": c["id"], "description": c["description"], "severity": c["severity"]})
+        except Exception as e:
+            logger.debug("Cross-references table not ready: %s", e)
+
+        try:
+            evals = conn.execute(
+                "SELECT id, text, evaluation_date FROM decisions_journal WHERE status = 'tracked' AND evaluation_date <= date('now')"
+            ).fetchall()
+            for e in evals:
+                items.append({"type": "pending_evaluation", "id": e["id"], "text": e["text"], "date": e["evaluation_date"]})
+        except Exception as e:
+            logger.debug("Decisions journal table not ready: %s", e)
+
+        try:
+            overdue = conn.execute(
+                "SELECT id, description, promised_to_name, due_date FROM promises WHERE status = 'pending' AND due_date < date('now')"
+            ).fetchall()
+            for o in overdue:
+                items.append({"type": "overdue_promise", "id": o["id"], "description": o["description"],
+                             "to": o["promised_to_name"], "due": o["due_date"]})
+        except Exception as e:
+            logger.debug("Promises table not ready: %s", e)
+
+        try:
+            approvals = conn.execute(
+                "SELECT id, action_type, description FROM action_log WHERE status = 'pending'"
+            ).fetchall()
+            for a in approvals:
+                items.append({"type": "pending_approval", "id": a["id"], "action": a["action_type"], "description": a["description"]})
+        except Exception as e:
+            logger.debug("Action log table not ready: %s", e)
+    finally:
+        conn.close()
+
+    return {"items": items, "total": len(items)}
+
+
+@app.get("/stats")
+def system_stats():
+    """Get system statistics."""
+    from backend.storage.resilience import check_database_integrity
+    integrity = check_database_integrity()
+    return {
+        "version": "0.4.0",
+        "database": integrity,
+    }
+
+
+@app.get("/resilience/status")
+def resilience_status(live_checks: bool = Query(default=False)):
+    """Return graceful-degradation level and component readiness."""
+    from backend.storage.resilience import get_degradation_status
+    return get_degradation_status(live_checks=live_checks)
+
+
+@app.get("/network/status")
+def network_status(live_checks: bool = Query(default=False)):
+    """Return local/offline readiness plus optional short network probes."""
+    from backend.storage.resilience import get_degradation_status
+    status = get_degradation_status(live_checks=live_checks)
+    return {
+        "level": status["level"],
+        "name": status["name"],
+        "network": status["components"]["network"],
+        "sarvam": status["components"]["sarvam"],
+        "local_core_ok": status["local_core_ok"],
+    }
+
+
+@app.post("/backup")
+def create_backup():
+    """Create a database backup."""
+    from backend.storage.resilience import backup_database
+    path = backup_database()
+    return {"status": "backed_up", "path": path}
+
+
+@app.post("/archive/audio")
+def archive_audio(
+    older_than_days: int = Query(default=30, ge=1, le=3650),
+    limit: int = Query(default=10, ge=1, le=100),
+    dry_run: bool = Query(default=False),
+    recording_id: Optional[str] = None,
+):
+    """Archive old local WAV recordings to AAC/M4A."""
+    from backend.storage.resilience import archive_old_audio
+    return archive_old_audio(
+        older_than_days=older_than_days,
+        limit=limit,
+        dry_run=dry_run,
+        recording_id=recording_id,
+    )
+
+
+@app.get("/queue")
+def list_queue():
+    """Get pending processing queue items."""
+    from backend.storage.resilience import get_queued_items
+    return get_queued_items()
+
+
+@app.post("/queue/process")
+def process_queue(limit: int = Query(default=3, ge=1, le=20), recording_id: Optional[str] = None):
+    """Process queued recordings locally, oldest first."""
+    from backend.storage.resilience import get_queued_items, mark_completed, mark_failed, mark_processing
+
+    processed = []
+    failed = []
+    items = get_queued_items()
+    if recording_id:
+        items = [item for item in items if item.get("recording_id") == recording_id]
+
+    for item in items[:limit]:
+        queue_id = item["id"]
+        recording_id = item["recording_id"]
+        try:
+            mark_processing(queue_id)
+            result = _process_saved_recording(
+                recording_id=recording_id,
+                audio_path=item["audio_path"],
+                mode=item.get("mode") or "voice_note",
+                num_speakers=None,
+            )
+            mark_completed(queue_id)
+            processed.append({"queue_id": queue_id, "recording_id": recording_id, "transcript_id": result.transcript_id})
+        except Exception as e:
+            mark_failed(queue_id, str(e))
+            _mark_recording_failed(recording_id)
+            failed.append({"queue_id": queue_id, "recording_id": recording_id, "error": str(e)})
+
+    return {"processed": processed, "failed": failed, "total_processed": len(processed), "total_failed": len(failed)}
+
+
+def _mark_recording_failed(recording_id: str):
+    conn = db.get_connection()
+    try:
+        conn.execute("UPDATE recordings SET status = 'failed' WHERE id = ?", (recording_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _mark_recording_processing(recording_id: str):
+    conn = db.get_connection()
+    try:
+        conn.execute("UPDATE recordings SET status = 'processing' WHERE id = ?", (recording_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _process_saved_recording(recording_id: str, audio_path: str, mode: str, num_speakers: Optional[int] = None) -> ProcessResponse:
+    """Run the full processing pipeline for an existing recording row."""
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {VALID_MODES}")
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+    _mark_recording_processing(recording_id)
+
+    audio_to_process = audio_path
+    if mode == "meeting":
+        recording_dir = os.path.dirname(audio_path)
+        system_audio = os.path.join(recording_dir, "system_audio.wav")
+        if os.path.exists(system_audio):
+            mixed_path = os.path.join(recording_dir, "mixed_audio.wav")
+            audio_to_process = mix_meeting_audio(audio_path, system_audio, mixed_path)
+
+    processed_dir = os.path.join(RECORDINGS_DIR, f"{datetime.now().strftime('%Y-%m-%d')}_{recording_id[:8]}")
+    processed_path = process_audio(audio_to_process, processed_dir)
+
+    if mode == "meeting":
+        transcript = transcribe_meeting(processed_path, num_speakers)
+    else:
+        transcript = transcribe_short(processed_path)
+
+    # Sarvam builds transcript metadata from the processed file path; keep
+    # the persisted transcript linked to the API recording row instead.
+    transcript["id"] = f"transcript_{recording_id}"
+    transcript["recording_id"] = recording_id
+    db.save_transcript(transcript)
+
+    knowledge = None
+    try:
+        transcript_text = transcript.get("full_transcript", "")
+        if transcript_text and len(transcript_text) > 20:
+            logger.info("Extracting knowledge with local reasoning engine...")
+            knowledge = local_llm_extract(transcript_text)
+            _persist_extracted_knowledge(recording_id, transcript, knowledge, mode)
+    except Exception as e:
+        logger.error("Knowledge extraction failed: %s", e)
+
+    transcript_text = transcript.get("full_transcript", "")
+    if transcript_text and len(transcript_text) > 50:
+        try:
+            from backend.intelligence.sentiment import analyze_transcript_sentiment
+            sentiment = analyze_transcript_sentiment(
+                transcript_text[:2000],
+                recording_id=recording_id,
+                transcript_id=transcript["id"],
+            )
+            logger.info("Sentiment: %s (score: %s)", sentiment.get("label"), sentiment.get("score"))
+        except Exception as e:
+            logger.warning("Sentiment analysis failed: %s", e)
+
+    preview = transcript.get("full_transcript", "")[:500]
+    return ProcessResponse(
+        recording_id=recording_id,
+        transcript_id=transcript["id"],
+        status="completed",
+        transcript_preview=preview,
+        knowledge=knowledge,
+    )
+
+
+def _persist_extracted_knowledge(recording_id: str, transcript: dict, knowledge: Optional[dict], mode: str):
+    if not knowledge:
+        return
+
+    transcript_id = transcript["id"]
+    for item in knowledge.get("action_items", []):
+        db.save_action_item(
+            transcript_id=transcript_id,
+            text=item.get("text", ""),
+            assignee=item.get("assignee"),
+            project=knowledge.get("project"),
+            due_date=item.get("due_date"),
+        )
+    for item in knowledge.get("decisions", []):
+        db.save_decision(
+            transcript_id=transcript_id,
+            text=item.get("text", ""),
+            made_by=item.get("made_by"),
+            context=item.get("context"),
+            project=knowledge.get("project"),
+        )
+        try:
+            from backend.intelligence.decisions import save_decision_journal
+            save_decision_journal(
+                transcript_id=transcript_id,
+                text=item.get("text", ""),
+                made_by=item.get("made_by"),
+                reasoning=item.get("context"),
+                confidence=7,
+                domain="work",
+                project_name=knowledge.get("project"),
+            )
+        except Exception as e:
+            logger.warning("Failed to save decision journal entry: %s", e)
+
+    for item in knowledge.get("promises", []):
+        _save_promise(transcript_id, item)
+
+    try:
+        from backend.intelligence.cross_reference import track_recurring_topics
+        topic_names = [t.get("title", "") for t in knowledge.get("topics", [])]
+        track_recurring_topics(topic_names)
+    except Exception as e:
+        logger.warning("Failed to track recurring topics: %s", e)
+
+    logger.info(
+        "Extracted: %d actions, %d decisions, %d promises",
+        len(knowledge.get("action_items", [])),
+        len(knowledge.get("decisions", [])),
+        len(knowledge.get("promises", [])),
+    )
+
+    if mode == "meeting":
+        try:
+            from backend.intelligence.meeting_score import score_meeting
+            score = score_meeting(recording_id, knowledge, transcript.get("duration_seconds", 0))
+            logger.info("Meeting score: %s/100", score["overall_score"])
+        except Exception as e:
+            logger.warning("Meeting scoring failed: %s", e)
+
+    try:
+        from backend.intelligence.cross_reference import check_contradictions
+        findings = check_contradictions(transcript.get("full_transcript", ""))
+        if findings:
+            logger.info("Cross-reference: %d findings", len(findings))
+    except Exception as e:
+        logger.warning("Cross-reference check failed: %s", e)
+
+    try:
+        from backend.graph.neo4j_client import ingest_knowledge
+        participants = [p.get("label", p.get("speaker_id", "")) for p in transcript.get("participants", [])]
+        ingest_knowledge(
+            knowledge,
+            transcript_id,
+            meeting_date=datetime.now().isoformat(),
+            participants=participants,
+        )
+    except Exception as e:
+        logger.warning("Graph ingestion skipped: %s", e)
+
+
+@app.post("/process", response_model=ProcessResponse)
+def process_recording(request: ProcessRequest):
+    """Full pipeline: preprocess -> transcribe -> extract knowledge."""
+    if request.mode not in VALID_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid mode '{request.mode}'. Must be one of: {VALID_MODES}")
+    if not os.path.exists(request.audio_path):
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {request.audio_path}")
+
+    recording_id = _stable_local_recording_id(request.mode, request.audio_path)
+    db.save_recording(recording_id, request.mode, request.audio_path)
+
+    try:
+        return _process_saved_recording(recording_id, request.audio_path, request.mode, request.num_speakers)
+    except Exception as e:
+        _mark_recording_failed(recording_id)
+        try:
+            from backend.storage.resilience import queue_for_processing
+            queue_for_processing(recording_id, request.audio_path, request.mode)
+        except Exception as queue_error:
+            logger.warning("Failed to queue recording %s: %s", recording_id, queue_error)
+        logger.error("Processing failed for recording %s: %s", recording_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _stable_local_recording_id(mode: str, audio_path: str) -> str:
+    path = Path(audio_path).expanduser().resolve()
+    stat = path.stat()
+    key = f"{mode}|{path}|{stat.st_size}|{stat.st_mtime_ns}"
+    return f"local_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:24]}"
+
+
+@app.get("/recordings")
+def list_recordings(limit: int = Query(default=10, ge=1, le=100)):
+    """List recent recordings with their transcripts."""
+    return db.get_recent_recordings(min(limit, 100))
+
+
+@app.get("/transcript/{recording_id}")
+def get_transcript(recording_id: str):
+    """Get full transcript for a recording."""
+    conn = db.get_connection()
+    try:
+        row = conn.execute(
+            "SELECT transcript_json FROM transcripts WHERE recording_id = ?",
+            (recording_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    return json.loads(row["transcript_json"])
+
+
+# ── Decision Journal Endpoints ──
+
+@app.get("/decisions")
+def list_decisions(status: Optional[str] = None, domain: Optional[str] = None):
+    """List all decisions in the journal."""
+    from backend.intelligence.decisions import get_all_decisions, migrate_existing_decisions
+    migrate_existing_decisions()
+    return get_all_decisions(status, domain)
+
+
+@app.get("/decisions/pending-evaluation")
+def pending_evaluations():
+    """Get decisions due for outcome evaluation."""
+    from backend.intelligence.decisions import get_pending_evaluations
+    return get_pending_evaluations()
+
+
+@app.get("/decisions/calibration")
+def calibration():
+    """Get calibration data: confidence vs actual accuracy."""
+    from backend.intelligence.decisions import get_calibration
+    return get_calibration()
+
+
+@app.get("/decisions/{decision_id}")
+def get_decision_detail(decision_id: int):
+    """Get a single decision with full details."""
+    from backend.intelligence.decisions import get_decision
+    d = get_decision(decision_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return d
+
+
+class EvaluateRequest(BaseModel):
+    outcome: str  # positive, negative, mixed, neutral
+    outcome_notes: Optional[str] = Field(None, max_length=2000)
+    was_correct: Optional[bool] = None
+
+
+@app.post("/decisions/{decision_id}/evaluate")
+def evaluate(decision_id: int, request: EvaluateRequest):
+    """Record the outcome of a decision."""
+    from backend.intelligence.decisions import evaluate_decision
+    if evaluate_decision(decision_id, request.outcome, request.outcome_notes, request.was_correct):
+        return {"status": "evaluated"}
+    raise HTTPException(status_code=404, detail="Decision not found")
+
+
+# ── Cross-Reference Endpoints ──
+
+@app.get("/cross-references")
+def list_cross_references():
+    """Get open contradictions and connections."""
+    from backend.intelligence.cross_reference import get_open_cross_references
+    return get_open_cross_references()
+
+
+@app.get("/cross-references/recurring")
+def recurring_topics():
+    """Get topics discussed 3+ times without resolution."""
+    from backend.intelligence.cross_reference import get_recurring_unresolved
+    return get_recurring_unresolved()
+
+
+class ResolveRequest(BaseModel):
+    resolution: str = Field(..., min_length=1, max_length=2000)
+
+
+@app.post("/cross-references/{ref_id}/resolve")
+def resolve_ref(ref_id: int, request: ResolveRequest):
+    """Resolve a cross-reference finding."""
+    from backend.intelligence.cross_reference import resolve_cross_reference
+    if resolve_cross_reference(ref_id, request.resolution):
+        return {"status": "resolved"}
+    raise HTTPException(status_code=404, detail="Cross-reference not found")
+
+
+# ── Writing Assistant Endpoints ──
+
+@app.get("/recordings/{recording_id}/minutes")
+def generate_minutes(recording_id: str):
+    """Generate formatted meeting minutes from a recording's transcript."""
+    from backend.ai.local_llm_engine import ask
+
+    conn = db.get_connection()
+    try:
+        row = conn.execute("SELECT transcript_json FROM transcripts WHERE recording_id = ?", (recording_id,)).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    transcript = json.loads(row["transcript_json"])
+    text = transcript.get("full_transcript", "")
+
+    if not text or len(text) < 20:
+        return {"minutes": "Transcript too short to generate minutes."}
+
+    prompt = f"""Generate professional meeting minutes from this transcript.
+
+Format:
+# Meeting Minutes — [Date]
+## Attendees
+## Discussion Summary
+## Decisions Made
+## Action Items (with assignee and due date)
+## Promises/Commitments
+## Next Steps
+
+Keep it concise and actionable.
+
+Transcript:
+{text[:3000]}"""
+
+    minutes = ask(prompt, max_wait=60)
+    return {"recording_id": recording_id, "minutes": minutes}
+
+
+@app.get("/generate/standup")
+def generate_standup():
+    """Auto-generate standup update from recent activity."""
+    from backend.ai.local_llm_engine import ask
+
+    # Gather recent data
+    action_items = db.get_pending_action_items()
+    conn = db.get_connection()
+    try:
+        recent = conn.execute(
+            "SELECT full_text, processed_at FROM transcripts ORDER BY processed_at DESC LIMIT 3"
+        ).fetchall()
+        decisions = conn.execute(
+            "SELECT text, created_at FROM decisions ORDER BY rowid DESC LIMIT 5"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    context = ""
+    if recent:
+        context += "Recent meetings:\n" + "\n".join(f"- {r['full_text'][:100]}" for r in recent) + "\n\n"
+    if decisions:
+        context += "Recent decisions:\n" + "\n".join(f"- {d['text']}" for d in decisions) + "\n\n"
+    if action_items:
+        context += "Pending tasks:\n" + "\n".join(f"- {a['text']} (assignee: {a.get('assignee', '?')})" for a in action_items[:5])
+
+    prompt = f"""Generate a concise standup update based on this activity data.
+
+Format:
+**Yesterday:** (what was done)
+**Today:** (what's planned)
+**Blockers:** (if any)
+
+Keep it under 100 words.
+
+Activity:
+{context}"""
+
+    standup = ask(prompt, max_wait=60)
+    return {"standup": standup}
+
+
+@app.get("/search")
+def search(query: str = Query(..., min_length=1, max_length=500), limit: int = 20):
+    """Full-text search across all transcripts."""
+    return db.search_transcripts(query, min(limit, 100))
+
+
+class MeetingPrepRequest(BaseModel):
+    attendees: list[str] = Field(..., min_length=1)
+    meeting_title: str = ""
+
+
+@app.post("/meeting-prep")
+def meeting_prep(request: MeetingPrepRequest):
+    """Generate pre-meeting preparation briefing for attendees."""
+    from backend.intelligence.meeting_prep import prepare_for_meeting
+    return prepare_for_meeting(request.attendees, request.meeting_title)
+
+
+@app.post("/meeting-prep/summary")
+def meeting_prep_summary(request: MeetingPrepRequest):
+    """Generate a human-readable pre-meeting prep summary."""
+    from backend.intelligence.meeting_prep import generate_prep_summary
+    summary = generate_prep_summary(request.attendees, request.meeting_title)
+    return {"summary": summary, "attendees": request.attendees}
+
+
+@app.post("/chat/react")
+def chat_react(request: ChatRequest):
+    """Advanced chat with multi-step reasoning (ReACT agent).
+
+    The agent autonomously decides which tools to call, chains multiple
+    searches, and synthesizes a comprehensive answer.
+    """
+    from backend.ai.react_agent import react_chat
+    result = react_chat(request.query)
+    return result
+
+
+@app.get("/briefing/morning")
+def morning_briefing():
+    """Generate and return today's morning briefing."""
+    from backend.heartbeat.engine import generate_morning_briefing
+    return generate_morning_briefing()
+
+
+@app.get("/notifications")
+def get_notifs():
+    """Get pending notifications from heartbeat."""
+    from backend.heartbeat.engine import get_notifications
+    return get_notifications()
+
+
+@app.post("/heartbeat/trigger")
+def trigger_heartbeat():
+    """Manually trigger a heartbeat check."""
+    from backend.heartbeat.engine import run_heartbeat, get_notifications
+    run_heartbeat()
+    return {"triggered": True, "notifications": get_notifications()}
+
+
+@app.get("/people")
+def list_people():
+    """List all people with their stats."""
+    from backend.people.graph import get_all_people, populate_from_knowledge
+    populate_from_knowledge()
+    return get_all_people()
+
+
+@app.get("/people/{person_id}")
+def get_person(person_id: int):
+    """Get detailed person profile."""
+    from backend.people.graph import get_person_detail
+    detail = get_person_detail(person_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return detail
+
+
+@app.get("/promises")
+def list_promises():
+    """List all pending promises."""
+    conn = db.get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM promises WHERE status = 'pending' ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=10000)
+    source_lang: str = "ta-IN"
+    target_lang: str = "en-IN"
+
+
+@app.post("/translate")
+def translate(request: TranslateRequest):
+    """Translate text between languages using Sarvam AI."""
+    from backend.transcription.sarvam_client import translate_text
+    translated = translate_text(request.text, request.source_lang, request.target_lang)
+    return {"original": request.text, "translated": translated, "source": request.source_lang, "target": request.target_lang}
+
+
+@app.get("/semantic-search")
+def semantic_search_endpoint(query: str, limit: int = 10):
+    """Semantic similarity search across all knowledge."""
+    from backend.storage.vectors import semantic_search
+    return semantic_search(query, top_k=min(limit, 50))
+
+
+@app.get("/action-items")
+def list_action_items(project: Optional[str] = None):
+    """List pending action items, optionally filtered by project."""
+    return db.get_pending_action_items(project)
+
+
+# ── Chat Endpoint ──
+
+class ChatRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    offline: bool = False
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list
+    confidence: str
+
+
+def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> list[dict]:
+    """Gather local knowledge snippets for chat without requiring an LLM."""
+    knowledge_context = []
+    seen_texts = set()
+
+    transcript_results = db.search_transcripts(query, limit=5)
+    for r in transcript_results:
+        text = r.get("text", "")
+        if text and text not in seen_texts:
+            seen_texts.add(text)
+            knowledge_context.append({
+                "text": text,
+                "source": f"Transcript ({r.get('mode', 'recording')})",
+                "date": r.get("recording_date", ""),
+                "speaker_label": r.get("speaker_label", ""),
+            })
+
+    if include_semantic:
+        try:
+            from backend.storage.vectors import semantic_search
+            vector_results = semantic_search(query, top_k=5, min_score=0.3)
+        except Exception as e:
+            logger.debug("Semantic chat search skipped: %s", e)
+            vector_results = []
+
+        for r in vector_results:
+            text = r.get("text", "")
+            if text and text not in seen_texts:
+                seen_texts.add(text)
+                knowledge_context.append({
+                    "text": text,
+                    "source": f"Semantic match ({r.get('source_table', 'unknown')}, score: {r.get('score', 0):.2f})",
+                    "date": "",
+                    "speaker_label": "",
+                })
+
+    action_items = db.get_pending_action_items()
+    if action_items:
+        items_text = "\n".join(
+            f"- {a['text']} (assignee: {a.get('assignee', 'unassigned')}, due: {a.get('due_date', 'no date')}, status: {a.get('status', 'pending')})"
+            for a in action_items[:10]
+        )
+        knowledge_context.append({
+            "text": f"Pending action items:\n{items_text}",
+            "source": "Task Database",
+            "date": "",
+            "speaker_label": "System",
+        })
+
+    conn = db.get_connection()
+    try:
+        decisions = conn.execute(
+            "SELECT text, made_by, context, created_at FROM decisions ORDER BY created_at DESC LIMIT 5"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if decisions:
+        dec_text = "\n".join(f"- {d['text']} (by: {d['made_by']}, context: {d['context']})" for d in decisions)
+        knowledge_context.append({
+            "text": f"Recent decisions:\n{dec_text}",
+            "source": "Decision Database",
+            "date": "",
+            "speaker_label": "System",
+        })
+
+    conn = db.get_connection()
+    try:
+        promises = conn.execute(
+            "SELECT promised_by_name, promised_to_name, description, due_date, status FROM promises WHERE status = 'pending' LIMIT 5"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if promises:
+        prom_text = "\n".join(
+            f"- {p['promised_by_name']} promised {p['promised_to_name']}: {p['description']} (due: {p['due_date'] or 'no date'})"
+            for p in promises
+        )
+        knowledge_context.append({
+            "text": f"Pending promises:\n{prom_text}",
+            "source": "Promise Database",
+            "date": "",
+            "speaker_label": "System",
+        })
+
+    return knowledge_context
+
+
+def _offline_chat_response(query: str, knowledge_context: list[dict]) -> dict:
+    """Return a deterministic local-search answer when local reasoning engine is unavailable."""
+    sources = []
+    lines = []
+    for i, entry in enumerate(knowledge_context[:8], start=1):
+        text = " ".join((entry.get("text") or "").split())
+        if not text:
+            continue
+        speaker = entry.get("speaker_label") or "Source"
+        source = entry.get("source") or "Local knowledge"
+        excerpt = text[:500]
+        lines.append(f"[{i}] {speaker}: {excerpt}")
+        sources.append({
+            "index": i,
+            "source": source,
+            "date": entry.get("date", ""),
+            "text": excerpt[:100],
+        })
+
+    if not lines:
+        return {
+            "answer": "Offline search mode: I couldn't find anything matching this query in the local knowledge base.",
+            "sources": [],
+            "confidence": "low",
+        }
+
+    return {
+        "answer": "Offline search mode: I found these local matches without using local reasoning engine synthesis:\n\n" + "\n\n".join(lines),
+        "sources": sources,
+        "confidence": "medium",
+    }
+
+
+def _llm_answer_unavailable(answer: str) -> bool:
+    markers = (
+        "Local reasoning CLI is not configured",
+        "Local reasoning CLI not found",
+        "Local reasoning CLI timed out",
+        "Error invoking local reasoning CLI",
+        "Error from local reasoning CLI",
+    )
+    return any(marker in answer for marker in markers)
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    """Ask SudoBrain a question. Falls back to local search when local reasoning engine is unavailable."""
+    from backend.ai.local_llm_engine import ask_with_knowledge
+    from backend.storage.vectors import embed_all
+
+    # Auto-embed any new items
+    try:
+        if not request.offline:
+            embed_all()
+    except Exception as e:
+        logger.debug("Auto-embed skipped: %s", e)
+
+    knowledge_context = _build_chat_knowledge_context(request.query, include_semantic=True)
+
+    if request.offline:
+        result = _offline_chat_response(request.query, knowledge_context)
+        return ChatResponse(answer=result["answer"], sources=result["sources"], confidence=result["confidence"])
+
+    # Ask local reasoning engine with full context
+    result = ask_with_knowledge(request.query, knowledge_context)
+
+    if _llm_answer_unavailable(result.get("answer", "")):
+        logger.info("local reasoning engine unavailable for chat; falling back to offline search response")
+        result = _offline_chat_response(request.query, knowledge_context)
+
+    # Check if user message is a correction and learn from it
+    try:
+        from backend.intelligence.self_improve import process_chat_for_corrections
+        learned = process_chat_for_corrections(request.query, result["answer"])
+        if learned and learned.get("learned"):
+            result["answer"] += f"\n\n---\n*Learned: {learned['rule']}*"
+    except Exception as e:
+        logger.debug("Self-improvement check skipped: %s", e)
+
+    return ChatResponse(
+        answer=result["answer"],
+        sources=result["sources"],
+        confidence=result["confidence"],
+    )
+
+
+# ── Daily Life Endpoints ──
+
+class HabitCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    category: Optional[str] = Field(None, max_length=100)
+    target: str = "daily"
+
+class HabitLog(BaseModel):
+    completed: bool = True
+    note: Optional[str] = Field(None, max_length=500)
+
+class ExpenseCreate(BaseModel):
+    amount: float = Field(..., gt=0, le=10_000_000)
+    category: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    date: Optional[str] = None
+
+class IdeaCreate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    context: Optional[str] = Field(None, max_length=2000)
+    category: Optional[str] = Field(None, max_length=100)
+
+@app.get("/habits")
+def list_habits():
+    from backend.life.manager import get_habits_with_streaks
+    return get_habits_with_streaks()
+
+@app.post("/habits")
+def create_habit_endpoint(request: HabitCreate):
+    from backend.life.manager import create_habit
+    return {"id": create_habit(request.name, request.category, request.target)}
+
+@app.post("/habits/{habit_id}/log")
+def log_habit_endpoint(habit_id: int, request: HabitLog):
+    from backend.life.manager import log_habit
+    log_habit(habit_id, request.completed, request.note)
+    return {"status": "logged"}
+
+@app.get("/expenses")
+def list_expenses(month: Optional[str] = None):
+    from backend.life.manager import get_expenses
+    return get_expenses(month)
+
+@app.get("/expenses/summary")
+def expense_summary(month: Optional[str] = None):
+    from backend.life.manager import get_expense_summary
+    return get_expense_summary(month)
+
+@app.post("/expenses")
+def add_expense_endpoint(request: ExpenseCreate):
+    from backend.life.manager import add_expense
+    return {"id": add_expense(request.amount, request.category, request.description, request.date)}
+
+@app.get("/ideas")
+def list_ideas(status: Optional[str] = None):
+    from backend.life.manager import get_ideas
+    return get_ideas(status)
+
+@app.post("/ideas")
+def add_idea_endpoint(request: IdeaCreate):
+    from backend.life.manager import add_idea
+    return {"id": add_idea(request.text, request.context, request.category)}
+
+@app.patch("/ideas/{idea_id}")
+def update_idea(idea_id: int, status: str):
+    from backend.life.manager import update_idea_status
+    if update_idea_status(idea_id, status):
+        return {"status": "updated"}
+    raise HTTPException(status_code=404, detail="Idea not found")
+
+
+# ── Self-Improving Rules Endpoints ──
+
+@app.get("/rules")
+def list_rules():
+    """Get all learned rules."""
+    from backend.intelligence.self_improve import get_all_rules
+    return get_all_rules()
+
+
+@app.get("/rules/corrections")
+def list_corrections():
+    """Get recent correction log."""
+    from backend.intelligence.self_improve import get_correction_log
+    return get_correction_log()
+
+
+# ── Guardrails Endpoints ──
+
+@app.get("/actions/pending")
+def pending_actions():
+    """List pending approval requests."""
+    from backend.ai.guardrails import get_pending_actions
+    return get_pending_actions()
+
+
+@app.post("/actions/{action_id}/approve")
+def approve(action_id: int):
+    """Approve a pending action."""
+    from backend.ai.guardrails import approve_action
+    if approve_action(action_id):
+        return {"status": "approved"}
+    raise HTTPException(status_code=404, detail="Action not found or already processed")
+
+
+@app.post("/actions/{action_id}/reject")
+def reject(action_id: int):
+    """Reject a pending action."""
+    from backend.ai.guardrails import reject_action
+    if reject_action(action_id):
+        return {"status": "rejected"}
+    raise HTTPException(status_code=404, detail="Action not found or already processed")
+
+
+@app.get("/system/status")
+def system_status():
+    """Return local safety-control and scheduler status."""
+    from backend.ai.guardrails import get_system_control_status
+    from backend.heartbeat.engine import is_scheduler_running
+    status = get_system_control_status()
+    status["scheduler"] = {"running": is_scheduler_running()}
+    return status
+
+
+@app.post("/system/emergency-stop")
+def emergency_stop(request: SystemControlRequest = None):
+    """Pause proactive jobs and reject queued hard actions."""
+    from backend.ai.guardrails import set_emergency_stop
+    from backend.heartbeat.engine import stop_scheduler, is_scheduler_running
+    reason = request.reason if request and request.reason else "Emergency stop requested"
+    status = set_emergency_stop(True, reason)
+    stop_scheduler()
+    status["scheduler"] = {"running": is_scheduler_running()}
+    return status
+
+
+@app.post("/system/resume")
+def resume_system(request: SystemControlRequest = None):
+    """Resume proactive jobs after an emergency stop."""
+    from backend.ai.guardrails import set_emergency_stop
+    from backend.heartbeat.engine import start_scheduler, is_scheduler_running
+    reason = request.reason if request and request.reason else "Resumed by user"
+    status = set_emergency_stop(False, reason)
+    start_scheduler()
+    status["scheduler"] = {"running": is_scheduler_running()}
+    return status
+
+
+# ── Fathom Integration Endpoints ──
+
+
+@app.get("/fathom/status")
+def fathom_status():
+    """Check if Fathom integration is configured."""
+    from backend.fathom.client import is_configured
+    return {"configured": is_configured()}
+
+
+@app.get("/fathom/meetings")
+def fathom_meetings(limit: int = 25):
+    """List meetings from Fathom."""
+    from backend.fathom.client import is_configured, list_meetings
+    if not is_configured():
+        raise HTTPException(status_code=400, detail="FATHOM_API_TOKEN not configured in .env")
+    limit = min(limit, 100)
+    try:
+        return list_meetings(limit=limit)
+    except Exception as e:
+        logger.error("Failed to list Fathom meetings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FathomProcessRequest(BaseModel):
+    share_url: str = ""
+    recording_id: str = ""
+    num_speakers: Optional[int] = Field(None, ge=1, le=20)
+
+
+@app.post("/fathom/process")
+def fathom_process(request: FathomProcessRequest, background_tasks: BackgroundTasks):
+    """Trigger the Fathom -> SudoBrain pipeline for a specific recording."""
+    from backend.fathom.client import is_configured, list_meetings as fm_list
+    from backend.fathom.pipeline import run_fathom_pipeline
+
+    if not is_configured():
+        raise HTTPException(status_code=400, detail="FATHOM_API_TOKEN not configured in .env")
+
+    share_url = request.share_url
+    recording_id = request.recording_id
+
+    if not share_url and not recording_id:
+        raise HTTPException(status_code=400, detail="Provide share_url or recording_id")
+
+    if not share_url:
+        try:
+            meetings = fm_list(limit=100)
+            for m in meetings.get("items", []):
+                if str(m.get("recording_id", "")) == recording_id:
+                    share_url = m.get("share_url") or m.get("url", "")
+                    break
+            if not share_url:
+                raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found in Fathom")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to look up Fathom recording %s: %s", recording_id, e)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    if not recording_id:
+        recording_id = share_url.rstrip("/").split("/")[-1]
+
+    background_tasks.add_task(run_fathom_pipeline, recording_id, share_url, request.num_speakers)
+    return {
+        "status": "accepted",
+        "recording_id": recording_id,
+        "message": "Fathom pipeline started in background",
+    }
+
+
+@app.post("/fathom/webhook")
+async def fathom_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Receive Fathom webhook events and auto-process recordings."""
+    from backend.fathom.webhook import verify_webhook, parse_webhook_event
+    from backend.fathom.pipeline import run_fathom_pipeline
+
+    body = await request.body()
+
+    webhook_id = request.headers.get("webhook-id", "")
+    webhook_timestamp = request.headers.get("webhook-timestamp", "")
+    webhook_signature = request.headers.get("webhook-signature", "")
+
+    # Enforce signature verification when webhook secret is configured
+    webhook_secret = os.getenv("FATHOM_WEBHOOK_SECRET", "")
+    if webhook_secret:
+        if not webhook_id or not webhook_signature:
+            logger.warning("Fathom webhook received without signature headers")
+            raise HTTPException(status_code=401, detail="Missing webhook signature headers")
+        if not verify_webhook(body, webhook_id, webhook_timestamp, webhook_signature):
+            logger.warning("Fathom webhook signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    else:
+        logger.warning("FATHOM_WEBHOOK_SECRET not set — webhook signature not verified")
+
+    payload = await request.json()
+    event = parse_webhook_event(payload)
+
+    logger.info("Fathom webhook received: %s for recording %s (%s)",
+                event["event_type"], event["recording_id"], event["title"])
+
+    share_url = event["share_url"] or event["url"]
+    if not share_url:
+        return JSONResponse(
+            status_code=200,
+            content={"status": "skipped", "reason": "no share_url in webhook payload"},
+        )
+
+    background_tasks.add_task(run_fathom_pipeline, event["recording_id"], share_url)
+
+    return {
+        "status": "accepted",
+        "recording_id": event["recording_id"],
+        "title": event["title"],
+        "message": "Fathom pipeline started in background",
+    }
+
+
+@app.post("/fathom/sync")
+def fathom_sync(limit: int = 5, background_tasks: BackgroundTasks = None):
+    """Sync recent Fathom meetings that haven't been processed yet."""
+    from backend.fathom.client import is_configured, list_meetings as fm_list
+    from backend.fathom.pipeline import run_fathom_pipeline
+
+    if not is_configured():
+        raise HTTPException(status_code=400, detail="FATHOM_API_TOKEN not configured in .env")
+
+    limit = min(limit, 25)
+    meetings = fm_list(limit=limit)
+    # Fathom can return more rows than requested; never queue more than caller asked.
+    items = meetings.get("items", [])[:limit]
+
+    # Find which Fathom recording IDs have already gone through the
+    # Sarvam-backed audio pipeline. Lightweight Fathom transcript imports do not
+    # satisfy the full requirement because Tamil/code-mixed audio needs Sarvam
+    # translation.
+    conn = db.get_connection()
+    try:
+        existing = conn.execute(
+            "SELECT transcript_json FROM transcripts WHERE full_text IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    processed_fathom_ids = set()
+    for row in existing:
+        try:
+            t = json.loads(row["transcript_json"])
+            fathom_data = t.get("fathom", {})
+            fid = fathom_data.get("fathom_recording_id", "")
+            source = t.get("source", "")
+            engine = (t.get("processing") or {}).get("engine", "")
+            if fid and (source == "fathom_meeting" or engine == "sarvam"):
+                processed_fathom_ids.add(fid)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    queued = []
+    skipped = []
+    for m in items:
+        rid = str(m.get("recording_id", ""))
+        share_url = m.get("share_url") or m.get("url", "")
+        title = m.get("title", "Untitled")
+
+        if rid in processed_fathom_ids:
+            skipped.append({"recording_id": rid, "title": title, "reason": "already processed"})
+            continue
+
+        if not share_url:
+            skipped.append({"recording_id": rid, "title": title, "reason": "no share_url"})
+            continue
+
+        if background_tasks:
+            background_tasks.add_task(run_fathom_pipeline, rid, share_url)
+        queued.append({"recording_id": rid, "title": title})
+
+    logger.info("Fathom sync: %d queued, %d skipped out of %d", len(queued), len(skipped), len(items))
+    return {
+        "queued": queued,
+        "skipped": skipped,
+        "total_found": len(items),
+        "total_queued": len(queued),
+        "total_skipped": len(skipped),
+    }
+
+
+# ── Knowledge Graph Endpoints ──
+
+
+@app.post("/graph/reset")
+def graph_reset():
+    """Wipe all Neo4j data — used for re-ingestion after name fixes."""
+    from backend.graph.neo4j_client import get_driver
+    driver = get_driver()
+    if not driver:
+        raise HTTPException(status_code=503, detail="Neo4j not available")
+    with driver.session() as session:
+        session.run("MATCH (n) DETACH DELETE n")
+    logger.info("Neo4j graph reset")
+    return {"status": "reset"}
+
+
+@app.post("/graph/reingest")
+def graph_reingest():
+    """Re-ingest all SQLite knowledge into Neo4j graph.
+
+    Use after name resolution fixes or graph reset.
+    """
+    from backend.graph.neo4j_client import ingest_knowledge
+    conn = db.get_connection()
+    try:
+        # Get all transcripts with extracted knowledge
+        trans = conn.execute(
+            "SELECT id, recording_id, transcript_json FROM transcripts"
+        ).fetchall()
+        ingested = 0
+        for t in trans:
+            try:
+                tj = json.loads(t["transcript_json"])
+            except Exception:
+                continue
+
+            tid = t["id"]
+            ais = conn.execute(
+                "SELECT text, assignee, due_date, project FROM action_items WHERE transcript_id = ?", (tid,)
+            ).fetchall()
+            decs = conn.execute(
+                "SELECT text, made_by, context, project FROM decisions WHERE transcript_id = ?", (tid,)
+            ).fetchall()
+            try:
+                proms = conn.execute(
+                    "SELECT description, promised_by_name, promised_to_name, due_date FROM promises WHERE transcript_id = ?",
+                    (tid,),
+                ).fetchall()
+            except Exception:
+                proms = []
+
+            # Find the project (from any item)
+            project = None
+            for a in ais:
+                if a["project"]:
+                    project = a["project"]
+                    break
+            if not project:
+                for d in decs:
+                    if d["project"]:
+                        project = d["project"]
+                        break
+
+            knowledge = {
+                "action_items": [{"text": a["text"], "assignee": a["assignee"],
+                                  "due_date": a["due_date"]} for a in ais],
+                "decisions": [{"text": d["text"], "made_by": d["made_by"],
+                               "context": d["context"]} for d in decs],
+                "promises": [{"text": p["description"], "promised_by": p["promised_by_name"],
+                              "promised_to": p["promised_to_name"], "due_date": p["due_date"]} for p in proms],
+                "topics": [],
+                "project": project,
+            }
+
+            participants = [p.get("label", p.get("speaker_id", ""))
+                            for p in tj.get("participants", [])]
+            fathom_data = tj.get("fathom", {})
+            meeting_date = fathom_data.get("recording_start_time", "")
+
+            ingest_knowledge(knowledge, tid, meeting_date=meeting_date, participants=participants)
+            ingested += 1
+    finally:
+        conn.close()
+
+    return {"status": "reingested", "count": ingested}
+
+
+@app.post("/people/cleanup")
+def people_cleanup():
+    """Clean up duplicate and junk person entries."""
+    from backend.people.name_resolver import cleanup_junk_people
+    result = cleanup_junk_people()
+    return result
+
+
+@app.get("/graph/status")
+def graph_status():
+    """Check Neo4j availability and graph statistics."""
+    from backend.graph.neo4j_client import graph_stats
+    return graph_stats()
+
+
+@app.get("/graph/person/{name}")
+def graph_person(name: str):
+    """Get a person's full knowledge network."""
+    from backend.graph.neo4j_client import get_person_network
+    return get_person_network(name)
+
+
+@app.get("/graph/project/{name}")
+def graph_project(name: str):
+    """Get everything connected to a project."""
+    from backend.graph.neo4j_client import get_project_graph
+    return get_project_graph(name)
+
+
+@app.get("/graph/bottlenecks")
+def graph_bottlenecks():
+    """Find people blocking the most action items."""
+    from backend.graph.neo4j_client import find_bottlenecks
+    return find_bottlenecks()
+
+
+@app.get("/graph/orphaned")
+def graph_orphaned():
+    """Find items not connected to any project."""
+    from backend.graph.neo4j_client import find_orphaned_items
+    return find_orphaned_items()
+
+
+# ── Document Ingestion Endpoint ──
+
+
+@app.post("/ingest")
+async def ingest_document(request: Request):
+    """Ingest a document (PDF, DOCX, TXT, MD) into the knowledge base.
+
+    Extracts text, runs knowledge extraction, stores in DB + graph.
+    Accepts multipart form upload.
+    """
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    filename = file.filename
+    content = await file.read()
+
+    # Save uploaded file
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, f"{uuid.uuid4().hex[:8]}_{filename}")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Extract text based on file type
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    text = ""
+
+    try:
+        if ext == "pdf":
+            import fitz
+            doc = fitz.open(file_path)
+            text = "\n\n".join(page.get_text() for page in doc)
+            doc.close()
+        elif ext == "docx":
+            from docx import Document
+            doc = Document(file_path)
+            text = "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        elif ext in ("txt", "md", "markdown", "text"):
+            text = content.decode("utf-8", errors="replace")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: .{ext}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to extract text from %s: %s", filename, e)
+        raise HTTPException(status_code=500, detail=f"Failed to parse file: {e}")
+
+    if not text or len(text.strip()) < 20:
+        return {"status": "skipped", "reason": "File has no meaningful text content"}
+
+    # Create a recording entry for the document
+    recording_id = str(uuid.uuid4())
+    db.save_recording(recording_id, "document", file_path)
+
+    # Run knowledge extraction
+    knowledge = None
+    try:
+        logger.info("Extracting knowledge from document: %s", filename)
+        knowledge = local_llm_extract(text[:8000])
+
+        if knowledge:
+            transcript_id = str(uuid.uuid4())
+
+            # Save as transcript entry
+            transcript_data = {
+                "id": transcript_id,
+                "recording_id": recording_id,
+                "source": "document",
+                "created_at": datetime.now().isoformat(),
+                "duration_seconds": 0,
+                "language": {"primary": "en", "detected": ["en"], "is_code_mixed": False},
+                "participants": [],
+                "segments": [{"speaker_id": "document", "start_seconds": 0, "end_seconds": 0,
+                              "text": text[:5000], "language": "en"}],
+                "full_transcript": text[:5000],
+                "processing": {"engine": "document", "model": "n/a",
+                               "processed_at": datetime.now().isoformat(),
+                               "audio_preprocessing": []},
+            }
+            db.save_transcript(transcript_data)
+
+            for item in knowledge.get("action_items", []):
+                db.save_action_item(
+                    transcript_id=transcript_id, text=item.get("text", ""),
+                    assignee=item.get("assignee"), project=knowledge.get("project"),
+                    due_date=item.get("due_date"),
+                )
+            for item in knowledge.get("decisions", []):
+                db.save_decision(
+                    transcript_id=transcript_id, text=item.get("text", ""),
+                    made_by=item.get("made_by"), context=item.get("context"),
+                    project=knowledge.get("project"),
+                )
+            for item in knowledge.get("promises", []):
+                _save_promise(transcript_id, item)
+
+            # Ingest into graph
+            try:
+                from backend.graph.neo4j_client import ingest_knowledge
+                ingest_knowledge(knowledge, transcript_id)
+            except Exception as e:
+                logger.warning("Graph ingestion skipped for document: %s", e)
+
+            logger.info(
+                "Document ingested: %s — %d actions, %d decisions, %d promises",
+                filename,
+                len(knowledge.get("action_items", [])),
+                len(knowledge.get("decisions", [])),
+                len(knowledge.get("promises", [])),
+            )
+
+    except Exception as e:
+        logger.error("Document knowledge extraction failed: %s", e)
+
+    return {
+        "status": "completed",
+        "filename": filename,
+        "recording_id": recording_id,
+        "text_length": len(text),
+        "knowledge": knowledge,
+    }
+
+
+# ── Smart Search (#9) ──
+
+@app.get("/search/smart")
+def smart_search(query: str = Query(..., min_length=1, max_length=500), top_k: int = 15):
+    """InsightForge smart search — decomposes question into sub-queries."""
+    from backend.intelligence.smart_search import insight_search
+    return insight_search(query, min(top_k, 50))
+
+
+# ── Email Draft (#10) ──
+
+@app.get("/recordings/{recording_id}/email-draft")
+def email_draft(recording_id: str):
+    """Generate follow-up email draft from a meeting recording."""
+    from backend.intelligence.email_drafter import draft_followup_email
+    return draft_followup_email(recording_id)
+
+
+# ── Workflows (#11) ──
+
+@app.get("/workflows")
+def list_workflows():
+    """List all workflow rules."""
+    from backend.intelligence.workflows import list_rules
+    return list_rules()
+
+
+class WorkflowCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    trigger_type: str
+    action_type: str
+    condition: Optional[dict] = None
+    action_params: Optional[dict] = None
+
+
+@app.post("/workflows")
+def create_workflow(request: WorkflowCreateRequest):
+    """Create a new workflow rule."""
+    from backend.intelligence.workflows import create_rule
+    rule_id = create_rule(request.name, request.trigger_type, request.action_type,
+                          request.condition, request.action_params)
+    return {"id": rule_id, "status": "created"}
+
+
+@app.delete("/workflows/{rule_id}")
+def delete_workflow(rule_id: int):
+    """Delete a workflow rule."""
+    from backend.intelligence.workflows import delete_rule
+    delete_rule(rule_id)
+    return {"status": "deleted"}
+
+
+@app.post("/workflows/evaluate")
+def evaluate_workflows():
+    """Manually trigger workflow evaluation."""
+    from backend.intelligence.workflows import evaluate_rules
+    return {"triggered": evaluate_rules()}
+
+
+@app.get("/workflows/log")
+def workflow_log(limit: int = 50):
+    """Get workflow execution history."""
+    from backend.intelligence.workflows import get_workflow_log
+    return get_workflow_log(min(limit, 200))
+
+
+@app.post("/workflows/defaults")
+def create_default_workflows():
+    """Create default workflow rules."""
+    from backend.intelligence.workflows import create_default_rules
+    create_default_rules()
+    return {"status": "defaults_created"}
+
+
+# ── Intelligence Reports (#12) ──
+
+@app.get("/reports/weekly")
+def weekly_report():
+    """Generate weekly intelligence report."""
+    from backend.intelligence.reports import generate_weekly_report
+    return generate_weekly_report()
+
+
+@app.get("/reports/monthly")
+def monthly_report():
+    """Generate monthly intelligence report."""
+    from backend.intelligence.reports import generate_monthly_report
+    return generate_monthly_report()
+
+
+# ── Sentiment Tracking (#13) ──
+
+@app.get("/sentiment/trend")
+def sentiment_trend(days: int = 30):
+    """Get sentiment trend over last N days."""
+    from backend.intelligence.sentiment import get_sentiment_trend
+    return get_sentiment_trend(min(days, 365))
+
+
+@app.get("/sentiment/person/{name}")
+def sentiment_by_person(name: str):
+    """Get sentiment for meetings involving a person."""
+    from backend.intelligence.sentiment import get_sentiment_by_person
+    return get_sentiment_by_person(name)
+
+
+@app.post("/sentiment/analyze")
+def analyze_sentiment_endpoint(text: str = Query(..., min_length=10)):
+    """Analyze sentiment of text."""
+    from backend.intelligence.sentiment import analyze_transcript_sentiment
+    return analyze_transcript_sentiment(text)
+
+
+# ── Personal CRM (#14) ──
+
+@app.get("/crm/health")
+def crm_health():
+    """Get all contacts with relationship health scores."""
+    from backend.intelligence.crm import get_relationship_health
+    return get_relationship_health()
+
+
+@app.get("/crm/stale")
+def crm_stale(days: int = 30):
+    """Get contacts you haven't interacted with in N days."""
+    from backend.intelligence.crm import get_stale_contacts
+    return get_stale_contacts(days)
+
+
+@app.get("/crm/top-contacts")
+def crm_top(limit: int = 10, days: int = 30):
+    """Get most frequent contacts in the last N days."""
+    from backend.intelligence.crm import get_top_contacts
+    return get_top_contacts(min(limit, 50), days)
+
+
+@app.get("/crm/contact/{name}")
+def crm_contact(name: str):
+    """Get full interaction history with a person."""
+    from backend.intelligence.crm import get_contact_history
+    return get_contact_history(name)
+
+
+# ── Task Dependencies (#15) ──
+
+class TaskDepRequest(BaseModel):
+    blocker_task_id: int
+    blocked_task_id: int
+
+
+@app.post("/tasks/dependency")
+def add_task_dep(request: TaskDepRequest):
+    """Mark that one task blocks another."""
+    from backend.intelligence.task_deps import add_dependency
+    add_dependency(request.blocker_task_id, request.blocked_task_id)
+    return {"status": "dependency_added"}
+
+
+@app.delete("/tasks/dependency")
+def remove_task_dep(request: TaskDepRequest):
+    """Remove a task dependency."""
+    from backend.intelligence.task_deps import remove_dependency
+    remove_dependency(request.blocker_task_id, request.blocked_task_id)
+    return {"status": "dependency_removed"}
+
+
+@app.get("/tasks/blocked")
+def blocked_tasks():
+    """Get all tasks blocked by other tasks."""
+    from backend.intelligence.task_deps import get_blocked_tasks
+    return get_blocked_tasks()
+
+
+@app.get("/tasks/critical-path")
+def critical_path():
+    """Get the critical path of dependent tasks."""
+    from backend.intelligence.task_deps import get_critical_path
+    return get_critical_path()
+
+
+@app.get("/tasks/blocking-summary")
+def blocking_summary():
+    """Get summary of who's blocking what."""
+    from backend.intelligence.task_deps import get_blocking_summary
+    return get_blocking_summary()
+
+
+# ── Meeting Scoring Trends (#18) ──
+
+@app.get("/meetings/score-trend")
+def meeting_score_trend(days: int = 30):
+    """Get meeting effectiveness trend."""
+    from backend.intelligence.meeting_trends import get_score_trend
+    return get_score_trend(min(days, 365))
+
+
+@app.get("/meetings/worst")
+def worst_meetings(limit: int = 5):
+    """Get lowest scoring meetings for reflection."""
+    from backend.intelligence.meeting_trends import get_worst_meetings
+    return get_worst_meetings(min(limit, 20))
+
+
+# ── ChromaDB Vector Store (#6) ──
+
+@app.get("/vectors/status")
+def vector_status():
+    """Get vector store status."""
+    from backend.storage.chroma_store import is_available, count
+    return {"available": is_available(), "count": count()}
+
+
+@app.post("/vectors/sync")
+def vector_sync():
+    """Sync all SQLite data into ChromaDB."""
+    from backend.storage.chroma_store import sync_from_sqlite
+    synced = sync_from_sqlite()
+    return {"synced": synced}
+
+
+# ── Local Whisper (#7) ──
+
+@app.get("/whisper/status")
+def whisper_status():
+    """Check if local Whisper is available."""
+    from backend.transcription.whisper_client import is_available
+    return {"available": is_available()}
+
+
+# ── Slack Integration ──
+
+
+@app.get("/slack/status")
+def slack_status():
+    """Get Slack integration status and sync stats."""
+    from backend.slack.client import is_available
+    from backend.slack.sync import get_sync_status
+    return {
+        "available": is_available(),
+        "stats": get_sync_status(),
+    }
+
+
+@app.post("/slack/sync/channels")
+def slack_sync_channels():
+    """Sync the list of Slack channels (no messages)."""
+    from backend.slack.sync import sync_channels
+    return sync_channels()
+
+
+@app.post("/slack/sync/users")
+def slack_sync_users():
+    """Sync active Slack users and merge with people graph."""
+    from backend.slack.sync import sync_users
+    return sync_users()
+
+
+class SlackSyncRequest(BaseModel):
+    channels: Optional[list[str]] = None
+    messages_per_channel: int = Field(default=50, ge=1, le=500)
+    days: int = Field(default=30, ge=1, le=365)
+    extract_knowledge: bool = True
+
+
+@app.post("/slack/sync")
+def slack_sync(request: SlackSyncRequest = None):
+    """Run a full Slack sync (last 30 days of messages).
+
+    Excludes alerts/bot channels automatically.
+    """
+    from backend.slack.sync import sync_all
+    req = request or SlackSyncRequest()
+    return sync_all(
+        channel_filter=req.channels,
+        messages_per_channel=req.messages_per_channel,
+        days=req.days,
+        extract_knowledge=req.extract_knowledge,
+    )
+
+
+@app.get("/slack/channels")
+def slack_list_channels(enabled_only: bool = True):
+    """List all stored Slack channels."""
+    conn = db.get_connection()
+    try:
+        if enabled_only:
+            rows = conn.execute(
+                "SELECT * FROM slack_channels WHERE sync_enabled = TRUE ORDER BY name"
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM slack_channels ORDER BY name").fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/slack/messages/{channel_id}")
+def slack_channel_messages(channel_id: str, limit: int = Query(50, ge=1, le=500)):
+    """Get stored messages from a channel."""
+    conn = db.get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT m.*, c.name as channel_name
+            FROM slack_messages m
+            LEFT JOIN slack_channels c ON c.id = m.channel_id
+            WHERE m.channel_id = ?
+            ORDER BY m.ts DESC LIMIT ?
+        """, (channel_id, limit)).fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/slack/pending")
+def slack_pending_tasks():
+    """Get pending items from Slack — unanswered @-mentions, questions, promises."""
+    from backend.slack.analysis import get_pending_items
+    return get_pending_items()
+
+
+@app.get("/slack/channel-health")
+def slack_channel_health():
+    """Get health metrics per channel."""
+    from backend.slack.analysis import get_channel_health
+    return get_channel_health()
+
+
+@app.get("/slack/engagement")
+def slack_engagement(days: int = 30):
+    """Get engagement metrics across all channels."""
+    from backend.slack.analysis import get_engagement_metrics
+    return get_engagement_metrics(days)
+
+
+@app.get("/slack/summary/{channel_id}")
+def slack_channel_summary(channel_id: str, limit: int = 50):
+    """Generate a conversation summary for a channel."""
+    from backend.slack.analysis import get_conversation_summary
+    return get_conversation_summary(channel_id, min(limit, 200))
+
+
+@app.post("/slack/extract/{channel_id}")
+def slack_extract_channel(
+    channel_id: str,
+    batch_size: int = Query(default=20, ge=1, le=100),
+    max_messages: int = Query(default=100, ge=1, le=1000),
+    max_batches: int = Query(default=1, ge=1, le=20),
+):
+    """Run bounded knowledge extraction on stored messages in a channel."""
+    from backend.slack.ingest import extract_from_messages
+    count = extract_from_messages(
+        channel_id,
+        batch_size=batch_size,
+        max_messages=max_messages,
+        max_batches=max_batches,
+    )
+    return {"channel_id": channel_id, "messages_processed": count}
+
+
+@app.post("/slack/extract-all")
+def slack_extract_all(
+    channel_limit: int = Query(default=5, ge=1, le=50),
+    batch_size: int = Query(default=20, ge=1, le=100),
+    max_messages_per_channel: int = Query(default=100, ge=1, le=1000),
+    max_batches_per_channel: int = Query(default=1, ge=1, le=20),
+):
+    """Run bounded knowledge extraction across enabled Slack channels."""
+    from backend.slack.ingest import extract_pending_messages
+    return extract_pending_messages(
+        channel_limit=channel_limit,
+        batch_size=batch_size,
+        max_messages_per_channel=max_messages_per_channel,
+        max_batches_per_channel=max_batches_per_channel,
+    )
+
+
+@app.post("/slack/validate")
+def slack_validate(limit: int = Query(default=5000, ge=1, le=50000)):
+    """Backfill Slack message validation for stored rows."""
+    from backend.slack.ingest import backfill_message_validation
+    return backfill_message_validation(limit=limit)
+
+
+# ── Health Correlation (#20) ──
+
+@app.get("/health-correlation")
+def health_correlation(days: int = 30):
+    """Get habit/health vs productivity correlation."""
+    from backend.intelligence.health_correlation import get_habit_productivity_correlation
+    return get_habit_productivity_correlation(min(days, 365))
+
+
+class HealthDataRequest(BaseModel):
+    data_type: str = Field(..., min_length=1, max_length=50)
+    value: float
+    date: Optional[str] = None
+
+
+@app.post("/health-data")
+def store_health_data(request: HealthDataRequest):
+    """Store health data from HealthKit or manual entry."""
+    from backend.intelligence.health_correlation import store_health_data
+    store_health_data(request.data_type, request.value, request.date)
+    return {"status": "stored"}
+
+
+# ── Whisper Transcription (#7) ──
+
+@app.post("/transcribe/whisper")
+def transcribe_with_whisper(audio_path: str):
+    """Transcribe audio using local Whisper model."""
+    from backend.transcription.whisper_client import transcribe, is_available
+    if not is_available():
+        raise HTTPException(status_code=400, detail="faster-whisper not available")
+    import os
+    if not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return transcribe(audio_path)
+
+
+# ── Gmail Integration ──
+
+
+@app.get("/gmail/status")
+def gmail_status():
+    """Check email integration availability and sync stats."""
+    from backend.gmail.client import is_available
+    from backend.gmail.ingest import get_email_stats
+    return {"available": is_available(), "stats": get_email_stats()}
+
+
+@app.post("/gmail/sync")
+def gmail_sync(days: int = 30, max_results: int = 30, background_tasks: BackgroundTasks = None):
+    """Fetch recent important emails with full body and extract knowledge.
+
+    Runs in background and extracts knowledge locally.
+    Check /gmail/status to see progress.
+    """
+    from backend.gmail.ingest import init_gmail_tables
+    init_gmail_tables()
+
+    def _do_sync():
+        from backend.gmail.client import get_smart_emails
+        from backend.gmail.ingest import store_message, extract_from_emails
+
+        logger.info("Gmail sync: fetching via direct API (last %d days)...", days)
+
+        # Direct API — fetches full bodies instantly, no LLM call per email fetch
+        emails = get_smart_emails(days=days, max_results=min(max_results, 100))
+        logger.info("Gmail sync: got %d human emails (filtered automated noise)", len(emails))
+
+        stored = 0
+        for email in emails:
+            if store_message(email):
+                stored += 1
+
+        extracted = extract_from_emails(limit=stored)
+        logger.info("Gmail sync complete: %d stored, %d extracted", stored, extracted)
+
+    if background_tasks:
+        background_tasks.add_task(_do_sync)
+        return {"status": "accepted", "message": "Gmail sync started in background"}
+    else:
+        _do_sync()
+        from backend.gmail.ingest import get_email_stats
+        return get_email_stats()
+
+
+@app.get("/gmail/pending")
+def gmail_pending(max_results: int = 20):
+    """Get unread emails likely needing action."""
+    from backend.gmail.client import get_action_emails
+    return get_action_emails(max_results=min(max_results, 100))
+
+
+@app.get("/gmail/search")
+def gmail_search(q: str = Query(..., min_length=1), max_results: int = 20):
+    """Search Gmail with a query string."""
+    from backend.gmail.client import search_emails
+    return search_emails(q, max_results=min(max_results, 100))
+
+
+# ── Calendar Integration ──
+
+
+@app.get("/calendar/status")
+def calendar_status():
+    """Check Google Calendar API availability (direct path)."""
+    from backend.calendar.direct_client import is_available
+    return {"available": is_available()}
+
+
+@app.get("/calendar/today")
+def calendar_today():
+    """Get today's events (direct API)."""
+    from backend.calendar.direct_client import get_todays_events
+    return get_todays_events()
+
+
+@app.get("/calendar/upcoming")
+def calendar_upcoming(days: int = 3):
+    """Get upcoming events for the next N days (direct API)."""
+    from backend.calendar.direct_client import get_upcoming_events
+    return get_upcoming_events(min(days, 60))
+
+
+@app.get("/calendar/past")
+def calendar_past(days: int = 30):
+    """Get past events for the last N days (direct API)."""
+    from backend.calendar.direct_client import get_past_events
+    return get_past_events(min(days, 90))
+
+
+@app.get("/calendar/next-meeting")
+def calendar_next_meeting():
+    """Get the next upcoming meeting and pre-meeting prep context."""
+    from backend.calendar.direct_client import get_next_meeting
+    event = get_next_meeting()
+    if not event:
+        return {"event": None, "message": "No upcoming meetings"}
+    # Compose lightweight prep context using attendee_emails to look up canonical people
+    from backend.storage.database import get_connection
+    conn = get_connection()
+    try:
+        emails = event.get("attendee_emails") or []
+        people = []
+        for em in emails:
+            r = conn.execute(
+                "SELECT id, name, email, organization FROM people WHERE LOWER(email) = ?",
+                (em,),
+            ).fetchone()
+            if r:
+                p = dict(r._row)
+                # pull pending promises and tasks
+                pr = conn.execute(
+                    "SELECT description, due_date FROM promises "
+                    "WHERE promised_to_name = ? AND status = 'pending' LIMIT 5",
+                    (p["name"],),
+                ).fetchall()
+                ai = conn.execute(
+                    "SELECT text FROM action_items WHERE assignee = ? AND status = 'pending' LIMIT 5",
+                    (p["name"],),
+                ).fetchall()
+                p["pending_promises_to_them"] = [dict(x._row) for x in pr]
+                p["pending_tasks"] = [dict(x._row) for x in ai]
+                people.append(p)
+    finally:
+        conn.close()
+    return {"event": event, "attendees": people}
+
+
+# ── Model Router ──
+
+
+@app.get("/models/status")
+def models_status():
+    """Get available models and their tier assignments."""
+    from backend.ai.model_router import _get_available_models, TIER_MAP, get_model
+    available = list(_get_available_models())
+    assignments = {task: get_model(task) for task in TIER_MAP}
+    return {"available_models": available, "task_assignments": assignments}
+
+
+@app.post("/models/refresh")
+def models_refresh():
+    """Refresh available model detection (run after pulling new models)."""
+    from backend.ai.model_router import invalidate_cache, _get_available_models
+    invalidate_cache()
+    models = list(_get_available_models())
+    return {"available_models": models, "count": len(models)}
+
+
+# ── Linear Integration ──
+
+
+@app.get("/linear/status")
+def linear_status():
+    """Check Linear API availability and sync stats."""
+    from backend.linear.client import is_available, get_viewer
+    from backend.linear.ingest import get_issue_stats, init_linear_tables
+    init_linear_tables()
+    available = is_available()
+    stats = get_issue_stats() if available else {}
+    viewer = get_viewer() if available else {}
+    return {"available": available, "viewer": viewer, "stats": stats}
+
+
+@app.post("/linear/sync")
+def linear_sync(days: int = 30, include_done: bool = False,
+                background_tasks: BackgroundTasks = None):
+    """Sync all Linear issues, projects and members."""
+    from backend.linear.ingest import init_linear_tables
+    init_linear_tables()
+
+    def _do_sync():
+        from backend.linear.client import get_issues, get_projects, get_members
+        from backend.linear.ingest import store_issue, store_project, store_member, extract_from_issues
+
+        logger.info("Linear sync: fetching members...")
+        members = get_members()
+        for m in members:
+            store_member(m)
+        logger.info("Linear: %d members stored", len(members))
+
+        logger.info("Linear sync: fetching projects...")
+        projects = get_projects()
+        for p in projects:
+            store_project(p)
+        logger.info("Linear: %d projects stored", len(projects))
+
+        logger.info("Linear sync: fetching issues (last %d days)...", days)
+        issues = get_issues(days=days, include_done=include_done)
+        for issue in issues:
+            store_issue(issue)
+        logger.info("Linear: %d issues stored", len(issues))
+
+        extracted = extract_from_issues()
+        logger.info("Linear: %d issues extracted", extracted)
+
+    if background_tasks:
+        background_tasks.add_task(_do_sync)
+        return {"status": "accepted", "message": "Linear sync started in background"}
+    else:
+        _do_sync()
+        from backend.linear.ingest import get_issue_stats
+        return get_issue_stats()
+
+
+@app.get("/linear/issues")
+def linear_issues(state: Optional[str] = None, assignee: Optional[str] = None,
+                  project: Optional[str] = None, limit: int = 50):
+    """Get stored Linear issues with optional filters."""
+    from backend.linear.ingest import init_linear_tables
+    init_linear_tables()
+    conn = db.get_connection()
+    try:
+        filters = ["state_type != 'cancelled'"]
+        params = []
+        if state:
+            filters.append("state_name = ?")
+            params.append(state)
+        if assignee:
+            filters.append("(assignee_name LIKE ? OR assignee_email LIKE ?)")
+            params.extend([f"%{assignee}%", f"%{assignee}%"])
+        if project:
+            filters.append("project_name LIKE ?")
+            params.append(f"%{project}%")
+
+        where = " AND ".join(filters)
+        params.append(min(limit, 200))
+
+        rows = conn.execute(
+            f"SELECT id, title, state_name, state_type, assignee_name, project_name, priority_label, due_date, url FROM linear_issues WHERE {where} ORDER BY updated_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/linear/projects")
+def linear_projects():
+    """Get all stored Linear projects."""
+    from backend.linear.ingest import init_linear_tables
+    init_linear_tables()
+    conn = db.get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM linear_projects ORDER BY name"
+        ).fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/linear/bottlenecks")
+def linear_bottlenecks():
+    """Find people with most open issues in Linear."""
+    from backend.linear.ingest import init_linear_tables
+    init_linear_tables()
+    conn = db.get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT assignee_name, assignee_email,
+                   COUNT(*) as open_count,
+                   COUNT(CASE WHEN due_date < CURRENT_DATE THEN 1 END) as overdue_count,
+                   COUNT(CASE WHEN priority <= 2 THEN 1 END) as urgent_count
+            FROM linear_issues
+            WHERE state_type IN ('unstarted', 'started')
+              AND assignee_name IS NOT NULL AND assignee_name != ''
+            GROUP BY assignee_name, assignee_email
+            ORDER BY overdue_count DESC, open_count DESC
+        """).fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/linear/overdue")
+def linear_overdue():
+    """Get overdue Linear issues."""
+    from backend.linear.ingest import init_linear_tables
+    init_linear_tables()
+    conn = db.get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT id, title, assignee_name, project_name, due_date, priority_label, url
+            FROM linear_issues
+            WHERE due_date IS NOT NULL
+              AND due_date < CURRENT_DATE
+              AND state_type NOT IN ('completed', 'cancelled')
+            ORDER BY due_date ASC
+        """).fetchall()
+        return [dict(r._row) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/sync/status")
+def unified_sync_status():
+    """Unified sync status across all data sources."""
+    conn = db.get_connection()
+    try:
+        def q1(sql):
+            try:
+                r = conn.execute(sql).fetchone()
+                return dict(r._row) if r else {}
+            except Exception:
+                return {}
+
+        slack = q1("""
+            SELECT COUNT(*) total, COUNT(*) FILTER (WHERE extracted) extracted,
+                   MAX(message_at) AT TIME ZONE 'Asia/Kolkata' latest
+            FROM slack_messages
+        """)
+        gmail = q1("""
+            SELECT COUNT(*) total, COUNT(*) FILTER (WHERE extracted) extracted,
+                   MAX(date) AT TIME ZONE 'Asia/Kolkata' latest
+            FROM gmail_messages
+        """)
+        linear = q1("""
+            SELECT COUNT(*) total, COUNT(*) FILTER (WHERE extracted) extracted,
+                   MAX(updated_at) AT TIME ZONE 'Asia/Kolkata' latest
+            FROM linear_issues
+        """)
+        slack_channels = q1("SELECT COUNT(*) total, COUNT(*) FILTER (WHERE sync_enabled) enabled FROM slack_channels")
+        linear_projects = q1("SELECT COUNT(*) total FROM linear_projects")
+        slack_users = q1("SELECT COUNT(*) total FROM slack_users")
+        people = q1("SELECT COUNT(*) total, COUNT(*) FILTER (WHERE email IS NOT NULL AND email != '') with_email FROM people")
+        source_sync = []
+        try:
+            rows = conn.execute("""
+                SELECT DISTINCT ON (source) source, status, detail, completed_at
+                FROM source_sync_log
+                ORDER BY source, completed_at DESC
+            """).fetchall()
+            source_sync = [dict(r._row) for r in rows]
+        except Exception:
+            source_sync = []
+
+        return {
+            "slack": {**slack, "channels": slack_channels, "users": slack_users["total"]},
+            "gmail": gmail,
+            "linear": {**linear, "projects": linear_projects["total"]},
+            "graph": {"people": people},
+            "source_sync": source_sync,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/sync/audit")
+def source_ingestion_audit():
+    """DB/Neo4j-only audit for source ingestion health and dedupe."""
+    from backend.source_audit import collect_source_audit
+    return collect_source_audit()
+
+
+@app.post("/sync/run")
+def run_unified_source_sync():
+    """Run one read-only source sync pass for Gmail, Slack, and Fathom."""
+    from backend.source_sync import run_source_sync_once
+    return run_source_sync_once()
+
+
+@app.post("/projects/context/sync")
+def sync_local_project_context():
+    """Scan configured local repos and update project/contributor knowledge."""
+    from backend.projects.context import sync_project_context
+    return sync_project_context()
+
+
+@app.get("/projects/context")
+def get_local_project_context():
+    """List configured local project context stored in SudoBrain."""
+    from backend.projects.context import list_project_context
+    return list_project_context()
+
+
+@app.get("/intelligence/overload")
+def intelligence_overload():
+    """Composite overload score for the user."""
+    from backend.intelligence.overload import compute_overload
+    return compute_overload()
+
+
+class CommitRiskRequest(BaseModel):
+    text: str
+    due_date: Optional[str] = None
+
+
+@app.post("/intelligence/commit-risk")
+def intelligence_commit_risk(req: CommitRiskRequest):
+    """Predict probability of delivering a proposed commitment."""
+    from backend.intelligence.commit_risk import predict_commit_risk
+    return predict_commit_risk(req.text, req.due_date)
+
+
+@app.get("/intelligence/focus")
+def intelligence_focus(days: int = 14):
+    """Daily focus/fragmentation index over the last N days."""
+    from backend.intelligence.focus import compute_focus_trend
+    return compute_focus_trend(days=min(days, 60))
+
+
+@app.get("/intelligence/trust-map")
+def intelligence_trust_map(min_sample: int = 2):
+    """Per-person promise fulfillment rate ranking."""
+    from backend.intelligence.trust_map import compute_trust_map
+    return compute_trust_map(min_sample=min_sample)
+
+
+@app.get("/intelligence/relationship-decay")
+def intelligence_relationship_decay(window_days: int = 14):
+    """Detect cooling/silent relationships compared to prior window."""
+    from backend.intelligence.relationship_decay import compute_relationship_decay
+    return compute_relationship_decay(window_days=window_days)
+
+
+@app.get("/intelligence/customer-pulse")
+def intelligence_customer_pulse():
+    """External org engagement status via Gmail."""
+    from backend.intelligence.customer_pulse import compute_customer_pulse
+    return compute_customer_pulse()
+
+
+@app.get("/intelligence/bus-factor")
+def intelligence_bus_factor():
+    """Per-project knowledge concentration + single-expert risk."""
+    from backend.intelligence.bus_factor import compute_bus_factor
+    return compute_bus_factor()
+
+
+@app.get("/intelligence/project-risk")
+def intelligence_project_risk():
+    """Velocity + composite risk score per Linear project."""
+    from backend.intelligence.project_risk import compute_project_risk
+    return compute_project_risk()
+
+
+@app.get("/intelligence/silent-projects")
+def intelligence_silent_projects(threshold_days: int = 14):
+    """Projects with no recent Linear or Slack activity."""
+    from backend.intelligence.silent_projects import compute_silent_projects
+    return compute_silent_projects(threshold_days=threshold_days)
+
+
+@app.get("/intelligence/stale-decisions")
+def intelligence_stale_decisions(min_age_days: int = 21):
+    """Old decisions whose project still has fresh activity."""
+    from backend.intelligence.stale_decisions import compute_stale_decisions
+    return compute_stale_decisions(min_age_days=min_age_days)
+
+
+@app.get("/intelligence/task-age-audit")
+def intelligence_task_age_audit(threshold_days: int = 30):
+    """Urgent tasks open too long + heavily overdue + stale action items."""
+    from backend.intelligence.task_age_audit import compute_task_age_audit
+    return compute_task_age_audit(threshold_days=threshold_days)
+
+
+@app.get("/intelligence/recurring-problems")
+def intelligence_recurring_problems(min_cluster_size: int = 3,
+                                    threshold: float = 0.75):
+    """Cluster semantically-similar tasks/issues to find recurring problems."""
+    from backend.intelligence.recurring_problems import compute_recurring_problems
+    return compute_recurring_problems(
+        min_cluster_size=min_cluster_size,
+        similarity_threshold=threshold,
+    )
+
+
+@app.get("/intelligence/emerging-topics")
+def intelligence_emerging_topics(window_days: int = 7):
+    """Terms spiking in recent window vs prior baseline."""
+    from backend.intelligence.emerging_topics import compute_emerging_topics
+    return compute_emerging_topics(window_days=window_days)
+
+
+@app.get("/intelligence/conflicts")
+def intelligence_conflicts(max_pairs: int = 10, use_llm: bool = True):
+    """Detect semantically-similar decisions with contradictory content via LLM."""
+    from backend.intelligence.conflicts import compute_conflicts
+    return compute_conflicts(max_pairs=max_pairs, use_llm=use_llm)
+
+
+@app.get("/intelligence/anomalies")
+def intelligence_anomalies(days: int = 30, sigma: float = 2.0):
+    """Daily stats vs rolling baseline; flags >Nσ deviations."""
+    from backend.intelligence.anomalies import compute_anomalies
+    return compute_anomalies(days=days, sigma=sigma)
+
+
+@app.get("/intelligence/meeting-roi")
+def intelligence_meeting_roi(days: int = 30):
+    """Meeting output vs attendee-minutes cost."""
+    from backend.intelligence.meeting_roi import compute_meeting_roi
+    return compute_meeting_roi(days=days)
+
+
+@app.get("/intelligence/meeting-rot")
+def intelligence_meeting_rot():
+    """Standing meetings with large person-minute cost."""
+    from backend.intelligence.meeting_rot import compute_meeting_rot
+    return compute_meeting_rot()
+
+
+class FlagMarkRequest(BaseModel):
+    flag_key: str
+    status: str
+    outcome: Optional[str] = None
+
+
+@app.get("/intelligence/self-score")
+def intelligence_self_score():
+    """Per-feature precision based on user feedback on raised flags."""
+    from backend.intelligence.flag_outcomes import compute_self_score, init_flag_table
+    init_flag_table()
+    return compute_self_score()
+
+
+@app.post("/intelligence/flag-mark")
+def intelligence_flag_mark(req: FlagMarkRequest):
+    """User marks a flag as true/false positive, acted, or dismissed."""
+    from backend.intelligence.flag_outcomes import mark_flag
+    ok = mark_flag(req.flag_key, req.status, req.outcome)
+    return {"ok": ok}
+
+
+class CorrectionRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    field: str
+    old_value: Optional[str] = None
+    new_value: str
+    explanation: Optional[str] = None
+
+
+@app.post("/intelligence/correction")
+def intelligence_correction(req: CorrectionRequest):
+    """Record a user correction of an extracted field."""
+    from backend.intelligence.learned_rules import record_correction
+    rid = record_correction(
+        req.entity_type, req.entity_id, req.field,
+        req.old_value or "", req.new_value, req.explanation,
+    )
+    return {"id": rid}
+
+
+@app.post("/intelligence/compile-rules")
+def intelligence_compile_rules(min_cluster_size: int = 2):
+    """Promote repeated corrections into learned rules."""
+    from backend.intelligence.learned_rules import compile_rules_from_corrections
+    return compile_rules_from_corrections(min_cluster_size=min_cluster_size)
+
+
+@app.get("/intelligence/learned-rules")
+def intelligence_learned_rules(limit: int = 20):
+    """List active learned rules that steer future extractions."""
+    from backend.intelligence.learned_rules import get_active_rules
+    return get_active_rules(limit=limit)
+
+
+@app.post("/fathom/ingest")
+def fathom_ingest_lightweight(days_back: int = 60, limit: int = 25,
+                              run_extract: bool = True):
+    """Lightweight Fathom ingest — uses Fathom transcripts directly (no audio download)."""
+    from backend.fathom.ingest import sync_recent
+    return sync_recent(days_back=days_back, limit=limit, run_extract=run_extract)
+
+
+@app.post("/intelligence/run-now")
+def intelligence_run_now(group: str = "all"):
+    """Manually trigger scheduled intelligence jobs.
+
+    group: 'all' | 'morning' | 'nightly' | 'weekly'
+    """
+    from backend.intelligence import scheduler as isched
+    fn = {
+        "all": isched.run_all_intelligence,
+        "morning": isched.run_morning_intelligence,
+        "nightly": isched.run_nightly_intelligence,
+        "weekly": isched.run_weekly_intelligence,
+    }.get(group)
+    if not fn:
+        raise HTTPException(status_code=400, detail="invalid group")
+    return fn()
+
+
+@app.post("/linear/sync/cycles")
+def linear_sync_cycles():
+    """Fetch Linear cycles (sprints) and store them."""
+    from backend.linear.client import get_cycles
+    cycles = get_cycles()
+    return {"fetched": len(cycles), "cycles": [
+        {"name": c.get("name"), "number": c.get("number"),
+         "starts_at": c.get("startsAt"), "ends_at": c.get("endsAt"),
+         "team": (c.get("team") or {}).get("name")}
+        for c in cycles
+    ]}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8420)

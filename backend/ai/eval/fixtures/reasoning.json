@@ -1,0 +1,24 @@
+{
+  "examples": [
+    {
+      "question": "If I have a meeting with Maya about caching tomorrow and she also owns the latency dashboard, what context should I prepare?",
+      "must_mention": ["caching", "latency", "dashboard"]
+    },
+    {
+      "question": "Maya is blocked on legal review for the privacy update. What's the impact on the v2 launch timeline?",
+      "must_mention": ["v2", "delay", "legal"]
+    },
+    {
+      "question": "List the open action items assigned to Alex across this week's meetings.",
+      "must_mention": ["Alex", "action"]
+    },
+    {
+      "question": "Jordan keeps getting paged for the same caching bug. What pattern should I flag to the team?",
+      "must_mention": ["recurring", "Jordan", "caching"]
+    },
+    {
+      "question": "We have three competing priorities: Series B paperwork, v2 launch, and the latency incident. Which should the team focus on first and why?",
+      "must_mention": ["priority", "incident"]
+    }
+  ]
+}

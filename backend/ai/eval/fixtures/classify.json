@@ -1,0 +1,25 @@
+{
+  "categories": ["question", "decision", "action_item", "fyi", "social"],
+  "examples": [
+    {"text": "Can someone review the auth PR by EOD?", "label": "action_item"},
+    {"text": "We're going with Postgres over Mongo for the metrics store.", "label": "decision"},
+    {"text": "What's the timeline for the v2 launch?", "label": "question"},
+    {"text": "Heads up — staging will be down for 30 min at 3pm.", "label": "fyi"},
+    {"text": "Coffee chat anyone? ☕", "label": "social"},
+    {"text": "Please update the runbook with the new failover steps.", "label": "action_item"},
+    {"text": "Decided to deprecate the legacy webhook endpoint next sprint.", "label": "decision"},
+    {"text": "Anyone know why the build is red on main?", "label": "question"},
+    {"text": "FYI the new design tokens are merged.", "label": "fyi"},
+    {"text": "Happy birthday Alex! 🎉", "label": "social"},
+    {"text": "Alex, can you sync with legal about the DPA today?", "label": "action_item"},
+    {"text": "We'll skip the Friday standup this week.", "label": "decision"},
+    {"text": "How do I rotate the prod API keys?", "label": "question"},
+    {"text": "Reminder: offsite logistics doc is in Notion.", "label": "fyi"},
+    {"text": "Lunch at the new ramen place tomorrow?", "label": "social"},
+    {"text": "Need someone to triage the Linear inbox before EOW.", "label": "action_item"},
+    {"text": "Locked in Q3 OKRs in today's leadership sync.", "label": "decision"},
+    {"text": "Why is latency spiking on the search endpoint?", "label": "question"},
+    {"text": "The new Slack workflow is live in #eng.", "label": "fyi"},
+    {"text": "Anyone up for board games Friday?", "label": "social"}
+  ]
+}

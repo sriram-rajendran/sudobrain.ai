@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SudoBrain — Your Brain Never Forgets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════════════
+   TOKENS — 5-Shade Depth Model
+   ═══════════════════════════════════════════════ */
+:root {
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body: 'Outfit', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --max-w: 1140px;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition: 0.35s var(--ease-out-expo);
+}
+
+[data-theme="dark"] {
+  --layer-0: #0B0B0F;
+  --layer-1: #111116;
+  --layer-2: #1A1A22;
+  --layer-3: #242430;
+  --layer-4: #30303E;
+  --border: #28283A;
+  --border-subtle: #1E1E2C;
+  --primary: #6366F1;
+  --primary-hover: #4F46E5;
+  --primary-soft: rgba(99, 102, 241, 0.12);
+  --primary-glow: rgba(99, 102, 241, 0.08);
+  --accent: #06B6D4;
+  --accent-soft: rgba(6, 182, 212, 0.10);
+  --success: #22C55E;
+  --success-soft: rgba(34, 197, 94, 0.10);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.10);
+  --error: #EF4444;
+  --error-soft: rgba(239, 68, 68, 0.10);
+  --text-1: #EDEDF0;
+  --text-2: #8B8BA0;
+  --text-3: #5A5A6E;
+  --nav-bg: rgba(11, 11, 15, 0.82);
+  --card-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  --glow-hero: radial-gradient(ellipse 70% 50% at 50% -5%, rgba(99,102,241,0.14), transparent 65%),
+               radial-gradient(ellipse 40% 35% at 75% 15%, rgba(6,182,212,0.07), transparent 55%);
+  --grain-opacity: 0.03;
+  --grid-opacity: 0.025;
+}
+
+[data-theme="light"] {
+  --layer-0: #F8F8FC;
+  --layer-1: #FFFFFF;
+  --layer-2: #F2F2F8;
+  --layer-3: #E8E8F0;
+  --layer-4: #FFFFFF;
+  --border: #DDDDE8;
+  --border-subtle: #E8E8F0;
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --primary-soft: rgba(79, 70, 229, 0.08);
+  --primary-glow: rgba(79, 70, 229, 0.05);
+  --accent: #0891B2;
+  --accent-soft: rgba(8, 145, 178, 0.07);
+  --success: #059669;
+  --success-soft: rgba(5, 150, 105, 0.08);
+  --warning: #D97706;
+  --warning-soft: rgba(217, 119, 6, 0.08);
+  --error: #DC2626;
+  --error-soft: rgba(220, 38, 38, 0.08);
+  --text-1: #151520;
+  --text-2: #6B6B80;
+  --text-3: #9E9EB0;
+  --nav-bg: rgba(248, 248, 252, 0.85);
+  --card-shadow: 0 8px 32px rgba(0,0,0,0.06);
+  --glow-hero: radial-gradient(ellipse 70% 50% at 50% -5%, rgba(79,70,229,0.06), transparent 65%),
+               radial-gradient(ellipse 40% 35% at 75% 15%, rgba(8,145,178,0.04), transparent 55%);
+  --grain-opacity: 0.015;
+  --grid-opacity: 0.03;
+}
+
+/* ═══════ Reset ═══════ */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+body{
+  font-family:var(--font-body);
+  background:var(--layer-0);
+  color:var(--text-1);
+  line-height:1.6;
+  overflow-x:hidden;
+  transition:background var(--transition),color var(--transition);
+}
+a{color:var(--primary);text-decoration:none}
+img{max-width:100%;display:block}
+
+/* ═══════ Noise Texture Overlay ═══════ */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  opacity:var(--grain-opacity);
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:128px;
+}
+
+/* ═══════ Grid Background ═══════ */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  opacity:var(--grid-opacity);
+  background-image:
+    linear-gradient(var(--primary) 1px, transparent 1px),
+    linear-gradient(90deg, var(--primary) 1px, transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(ellipse 60% 50% at 50% 30%, black 20%, transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse 60% 50% at 50% 30%, black 20%, transparent 70%);
+  transition:opacity var(--transition);
+}
+
+/* ═══════ Utility ═══════ */
+.container{max-width:var(--max-w);margin:0 auto;padding:0 32px}
+section{position:relative;z-index:1}
+
+/* ═══════ NAV ═══════ */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:var(--nav-bg);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border-subtle);
+  transition:background var(--transition),border-color var(--transition);
+}
+.nav-inner{
+  max-width:var(--max-w);margin:0 auto;padding:0 32px;
+  height:60px;display:flex;align-items:center;justify-content:space-between;
+}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:1.35rem;color:var(--text-1);letter-spacing:-0.01em}
+.logo-mark{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-family:var(--font-body);font-weight:700;font-size:14px;
+}
+.nav-links{display:flex;align-items:center;gap:28px;list-style:none}
+.nav-links a{color:var(--text-2);font-size:0.88rem;font-weight:450;transition:color var(--transition)}
+.nav-links a:hover{color:var(--text-1)}
+.nav-cta{
+  padding:8px 18px;border-radius:8px;font-size:0.85rem;font-weight:600;
+  background:var(--primary);color:#fff;border:none;cursor:pointer;font-family:var(--font-body);
+  transition:all var(--transition);
+}
+.nav-cta:hover{background:var(--primary-hover);transform:translateY(-1px)}
+
+/* Theme Toggle */
+.theme-btn{
+  width:36px;height:36px;border-radius:8px;border:1px solid var(--border);
+  background:var(--layer-2);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:all var(--transition);color:var(--text-2);
+}
+.theme-btn:hover{background:var(--layer-3);color:var(--text-1)}
+[data-theme="dark"] .theme-btn .sun{display:none}
+[data-theme="dark"] .theme-btn .moon{display:block}
+[data-theme="light"] .theme-btn .sun{display:block}
+[data-theme="light"] .theme-btn .moon{display:none}
+
+/* ═══════ HERO ═══════ */
+.hero{
+  padding:160px 32px 100px;
+  text-align:center;
+  background:var(--glow-hero);
+  min-height:100vh;
+  display:flex;align-items:center;
+}
+.hero .container{width:100%}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 16px 6px 10px;
+  background:var(--primary-soft);border:1px solid rgba(99,102,241,0.15);
+  border-radius:999px;font-size:0.8rem;font-weight:500;color:var(--primary);
+  margin-bottom:32px;
+}
+.hero-badge .pulse{
+  width:7px;height:7px;border-radius:50%;background:var(--success);
+  animation:pulse 2.5s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+.hero h1{
+  font-family:var(--font-display);
+  font-size:clamp(3rem,7vw,5.5rem);
+  font-weight:400;line-height:1.08;letter-spacing:-0.03em;
+  margin-bottom:24px;
+}
+.hero h1 em{
+  font-style:italic;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-sub{
+  font-size:clamp(1.05rem,1.8vw,1.25rem);
+  color:var(--text-2);max-width:540px;margin:0 auto 40px;
+  font-weight:350;line-height:1.7;
+}
+.hero-buttons{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:14px 28px;border-radius:var(--radius-sm);
+  font-size:0.92rem;font-weight:600;font-family:var(--font-body);
+  cursor:pointer;transition:all var(--transition);border:none;
+}
+.btn-primary{
+  background:var(--primary);color:#fff;
+  box-shadow:0 4px 20px rgba(99,102,241,0.25);
+}
+.btn-primary:hover{background:var(--primary-hover);transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,0.3)}
+.btn-ghost{
+  background:transparent;color:var(--text-1);
+  border:1px solid var(--border);
+}
+.btn-ghost:hover{background:var(--layer-2);transform:translateY(-2px)}
+
+/* ═══════ APP PREVIEW (Hero) ═══════ */
+.app-preview{margin-top:64px;perspective:1200px}
+.app-frame{
+  max-width:800px;margin:0 auto;
+  background:var(--layer-1);
+  border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  box-shadow:var(--card-shadow),0 0 120px var(--primary-glow);
+  transition:all var(--transition);
+  transform:rotateX(2deg);
+}
+.app-frame:hover{transform:rotateX(0deg)}
+.app-chrome{
+  display:flex;align-items:center;gap:8px;
+  padding:12px 16px;
+  background:var(--layer-2);
+  border-bottom:1px solid var(--border-subtle);
+}
+.app-chrome .dot{width:10px;height:10px;border-radius:50%}
+.app-chrome .d-r{background:#FF5F57}.app-chrome .d-y{background:#FFBD2E}.app-chrome .d-g{background:#28CA41}
+.app-chrome .title{margin-left:auto;margin-right:auto;font-size:0.75rem;color:var(--text-3);font-weight:500}
+
+.app-tabs{
+  display:flex;gap:0;border-bottom:1px solid var(--border-subtle);
+  background:var(--layer-2);padding:0 16px;
+}
+.app-tab{
+  padding:10px 16px;font-size:0.78rem;font-weight:500;
+  color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;
+  transition:all var(--transition);background:none;border-top:none;border-left:none;border-right:none;
+  font-family:var(--font-body);
+}
+.app-tab:hover{color:var(--text-2)}
+.app-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+
+.app-content{padding:24px;min-height:280px}
+.app-view{display:none}
+.app-view.active{display:block;animation:fadeIn .4s var(--ease-out-expo)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Today View */
+.today-greeting{font-family:var(--font-display);font-size:1.4rem;margin-bottom:4px}
+.today-date{font-size:0.82rem;color:var(--text-3);margin-bottom:20px}
+.today-card{
+  background:var(--layer-2);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm);padding:16px;margin-bottom:12px;
+}
+.today-card-header{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);font-weight:600;margin-bottom:10px}
+.today-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;font-size:0.85rem}
+.today-item .time{color:var(--text-3);font-family:var(--font-mono);font-size:0.78rem;min-width:44px}
+.today-item .badge{font-size:0.68rem;padding:2px 7px;border-radius:4px;font-weight:500}
+.badge-warn{background:var(--warning-soft);color:var(--warning)}
+.badge-ok{background:var(--success-soft);color:var(--success)}
+.badge-info{background:var(--primary-soft);color:var(--primary)}
+
+/* Chat View */
+.chat-msg{margin-bottom:16px;max-width:85%}
+.chat-msg.user{margin-left:auto;text-align:right}
+.chat-msg .sender{font-size:0.7rem;color:var(--text-3);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em}
+.chat-msg .bubble{
+  font-size:0.88rem;line-height:1.6;padding:12px 16px;
+  border-radius:12px;
+}
+.chat-msg.user .bubble{background:var(--primary-soft);color:var(--text-1)}
+.chat-msg.ai .bubble{background:var(--layer-2);border:1px solid var(--border-subtle);color:var(--text-1)}
+.chat-msg .source{font-size:0.72rem;color:var(--primary);margin-top:6px;cursor:pointer}
+.confidence{font-size:0.65rem;padding:2px 6px;border-radius:3px;font-weight:600;margin-left:4px}
+.conf-high{background:var(--success-soft);color:var(--success)}
+.conf-med{background:var(--warning-soft);color:var(--warning)}
+
+/* Meeting View */
+.meeting-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.meeting-title{font-family:var(--font-display);font-size:1.2rem}
+.meeting-score{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:8px;
+  background:var(--success-soft);color:var(--success);
+  font-size:0.82rem;font-weight:600;
+}
+.meeting-meta{display:flex;gap:16px;font-size:0.8rem;color:var(--text-3);margin-bottom:16px}
+.meeting-section{margin-bottom:16px}
+.meeting-section h4{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);font-weight:600;margin-bottom:8px}
+.decision-item,.action-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;font-size:0.85rem;
+  background:var(--layer-2);border-radius:var(--radius-xs);
+  margin-bottom:6px;
+}
+.decision-check{color:var(--success);font-weight:bold}
+.action-circle{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);flex-shrink:0}
+.action-assignee{margin-left:auto;font-size:0.75rem;color:var(--text-3)}
+
+/* ═══════ SECTION HEADERS ═══════ */
+.sec-label{
+  font-size:0.78rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:0.1em;color:var(--primary);margin-bottom:12px;
+  display:flex;align-items:center;gap:10px;
+}
+.sec-label::before{content:'';width:24px;height:1.5px;background:var(--primary);border-radius:1px}
+.sec-title{
+  font-family:var(--font-display);
+  font-size:clamp(2rem,4.5vw,3.2rem);
+  font-weight:400;line-height:1.12;letter-spacing:-0.02em;
+  margin-bottom:16px;
+}
+.sec-desc{font-size:1.05rem;color:var(--text-2);max-width:520px;line-height:1.7;font-weight:350}
+
+/* ═══════ PILLARS ═══════ */
+.pillars{padding:120px 32px;background:var(--layer-1)}
+.pillars-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:56px}
+.pillar{
+  background:var(--layer-2);border:1px solid var(--border-subtle);
+  border-radius:var(--radius);padding:32px 28px;
+  transition:all var(--transition);cursor:default;position:relative;overflow:hidden;
+}
+.pillar::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);
+  opacity:0;transition:opacity var(--transition);
+}
+.pillar:hover{
+  background:var(--layer-3);border-color:var(--border);
+  transform:translateY(-4px);box-shadow:var(--card-shadow);
+}
+.pillar:hover::before{opacity:1}
+.pillar-icon{
+  width:44px;height:44px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;font-size:18px;
+}
+.pillar h3{font-size:1.05rem;font-weight:600;margin-bottom:8px;letter-spacing:-0.01em}
+.pillar p{font-size:0.88rem;color:var(--text-2);line-height:1.6;font-weight:350}
+.pi-ears{background:var(--primary-soft);color:var(--primary)}
+.pi-eyes{background:var(--accent-soft);color:var(--accent)}
+.pi-brain{background:rgba(236,72,153,0.10);color:#EC4899}
+.pi-memory{background:var(--success-soft);color:var(--success)}
+.pi-mouth{background:rgba(251,146,60,0.10);color:#FB923C}
+.pi-hands{background:rgba(59,130,246,0.10);color:#3B82F6}
+.pi-mirror{background:rgba(168,85,247,0.10);color:#A855F7}
+
+/* Pillar SVG Icons */
+.p-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ═══════ BLUE OCEAN ═══════ */
+.blue-ocean{padding:120px 32px}
+.blue-ocean .sec-title em{font-style:italic;color:var(--primary)}
+.bo-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:56px}
+.bo-card{
+  background:var(--layer-1);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;
+  transition:all var(--transition);
+}
+.bo-card:hover{border-color:var(--primary);box-shadow:0 0 40px var(--primary-glow)}
+.bo-visual{
+  padding:28px 24px;
+  background:var(--layer-2);
+  border-bottom:1px solid var(--border-subtle);
+  min-height:160px;display:flex;align-items:center;justify-content:center;
+}
+.bo-text{padding:24px}
+.bo-text h3{font-family:var(--font-display);font-size:1.3rem;margin-bottom:8px}
+.bo-text p{font-size:0.88rem;color:var(--text-2);line-height:1.6;font-weight:350}
+
+/* Decision Journal Demo */
+.dj-bar{display:flex;align-items:flex-end;gap:4px;height:100px}
+.dj-col{
+  width:28px;border-radius:4px 4px 0 0;
+  transition:height .6s var(--ease-out-expo);
+}
+.dj-label{font-size:0.65rem;color:var(--text-3);text-align:center;margin-top:6px;font-family:var(--font-mono)}
+.dj-legend{display:flex;gap:16px;margin-top:16px;font-size:0.72rem;color:var(--text-2)}
+.dj-legend span{display:flex;align-items:center;gap:4px}
+.dj-legend .dot{width:8px;height:8px;border-radius:2px}
+
+/* Promise Loop Demo */
+.pl-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center}
+.pl-node{
+  padding:8px 14px;border-radius:8px;font-size:0.78rem;font-weight:500;
+  border:1px solid var(--border);background:var(--layer-3);
+  transition:all .4s var(--ease-out-expo);white-space:nowrap;
+}
+.pl-arrow{color:var(--text-3);font-size:0.9rem}
+.pl-node.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+
+/* Meeting Score Demo */
+.ms-score-big{
+  font-family:var(--font-display);font-size:3.5rem;
+  text-align:center;line-height:1;
+}
+.ms-label{text-align:center;font-size:0.82rem;color:var(--text-2);margin-top:4px;margin-bottom:16px}
+.ms-bars{display:flex;flex-direction:column;gap:6px}
+.ms-bar-row{display:flex;align-items:center;gap:10px;font-size:0.75rem}
+.ms-bar-label{width:110px;color:var(--text-2);text-align:right;flex-shrink:0}
+.ms-bar-track{flex:1;height:6px;background:var(--layer-3);border-radius:3px;overflow:hidden}
+.ms-bar-fill{height:100%;border-radius:3px;transition:width 1s var(--ease-out-expo)}
+
+/* Proactive Silence Demo */
+.ps-demo{text-align:center}
+.ps-ring{
+  width:100px;height:100px;border-radius:50%;
+  border:3px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px;position:relative;
+}
+.ps-ring::after{
+  content:'';position:absolute;inset:-3px;border-radius:50%;
+  border:3px solid transparent;border-top-color:var(--primary);
+  animation:spin 3s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ps-value{font-family:var(--font-display);font-size:1.6rem}
+.ps-label-txt{font-size:0.78rem;color:var(--text-2)}
+.ps-verdict{
+  margin-top:12px;padding:6px 14px;border-radius:6px;
+  font-size:0.8rem;font-weight:600;display:inline-block;
+}
+.ps-silent{background:var(--success-soft);color:var(--success)}
+
+/* ═══════ HOW IT WORKS ═══════ */
+.how{padding:120px 32px;background:var(--layer-1)}
+.how-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:56px}
+.how-step{position:relative;text-align:center}
+.how-num{
+  width:52px;height:52px;margin:0 auto 20px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:1.3rem;
+  background:var(--primary-soft);color:var(--primary);
+  border:1px solid rgba(99,102,241,0.15);
+}
+.how-step h3{font-size:1.05rem;font-weight:600;margin-bottom:8px}
+.how-step p{font-size:0.88rem;color:var(--text-2);line-height:1.6;font-weight:350}
+.how-connector{
+  position:absolute;top:26px;left:calc(50% + 36px);width:calc(100% - 72px);
+  height:1px;background:linear-gradient(90deg,var(--primary),var(--border));
+  display:none;
+}
+@media(min-width:769px){.how-connector{display:block}}
+
+/* ═══════ PRINCIPLES ═══════ */
+.principles{padding:120px 32px}
+.pr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:56px}
+.pr-card{
+  padding:28px 24px;border-radius:var(--radius);
+  border:1px solid var(--border-subtle);background:var(--layer-1);
+  transition:all var(--transition);
+}
+.pr-card:hover{border-color:var(--primary);background:var(--layer-2)}
+.pr-icon{font-size:1.5rem;margin-bottom:14px}
+.pr-card h3{font-size:0.95rem;font-weight:600;margin-bottom:6px}
+.pr-card p{font-size:0.82rem;color:var(--text-2);line-height:1.5;font-weight:350}
+
+/* ═══════ CTA ═══════ */
+.cta{padding:120px 32px;text-align:center}
+.cta-box{
+  background:var(--layer-1);border:1px solid var(--border);
+  border-radius:24px;padding:80px 48px;position:relative;overflow:hidden;
+  transition:all var(--transition);
+}
+.cta-box::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.08), transparent 60%);
+  pointer-events:none;
+}
+.cta-box h2{font-family:var(--font-display);font-size:clamp(2rem,4vw,3rem);position:relative;margin-bottom:14px}
+.cta-box .sub{color:var(--text-2);font-size:1.05rem;margin-bottom:36px;position:relative;font-weight:350}
+.cta-form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;position:relative}
+.cta-form input{
+  padding:14px 20px;border-radius:var(--radius-sm);
+  border:1px solid var(--border);background:var(--layer-0);color:var(--text-1);
+  font-size:0.92rem;font-family:var(--font-body);width:300px;outline:none;
+  transition:border-color var(--transition),background var(--transition);
+}
+.cta-form input:focus{border-color:var(--primary)}
+.cta-form input::placeholder{color:var(--text-3)}
+.cta-note{margin-top:16px;font-size:0.82rem;color:var(--text-3);position:relative}
+
+/* ═══════ FOOTER ═══════ */
+footer{
+  position:relative;z-index:1;
+  border-top:1px solid var(--border-subtle);
+  padding:48px 32px;
+  transition:border-color var(--transition);
+}
+.footer-inner{
+  max-width:var(--max-w);margin:0 auto;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.footer-left{font-size:0.85rem;color:var(--text-3);font-weight:350}
+.footer-links{display:flex;gap:24px;list-style:none}
+.footer-links a{font-size:0.82rem;color:var(--text-3);transition:color var(--transition);font-weight:400}
+.footer-links a:hover{color:var(--text-1)}
+
+/* ═══════ SCROLL REVEAL ═══════ */
+.reveal{opacity:0;transform:translateY(32px);transition:opacity .7s var(--ease-out-expo),transform .7s var(--ease-out-expo)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-d1{transition-delay:.1s}
+.reveal-d2{transition-delay:.2s}
+.reveal-d3{transition-delay:.3s}
+.reveal-d4{transition-delay:.35s}
+.reveal-d5{transition-delay:.4s}
+.reveal-d6{transition-delay:.45s}
+
+/* ═══════ RESPONSIVE ═══════ */
+@media(max-width:1024px){
+  .pillars-grid{grid-template-columns:repeat(2,1fr)}
+  .pr-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:768px){
+  .pillars-grid,.how-steps,.bo-grid,.pr-grid{grid-template-columns:1fr}
+  .hero{padding-top:120px;min-height:auto}
+  .hero h1{font-size:2.6rem}
+  section{padding:80px 20px}
+  .nav-links{display:none}
+  .app-frame{transform:none}
+  .app-frame:hover{transform:none}
+  .footer-inner{flex-direction:column;gap:20px;text-align:center}
+  .cta-box{padding:48px 24px}
+  .cta-form input{width:100%}
+  .bo-grid{gap:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════ NAV ═══════ -->
+<nav>
+  <div class="nav-inner">
+    <div class="logo"><div class="logo-mark">S</div> SudoBrain</div>
+    <ul class="nav-links">
+      <li><a href="#pillars">Features</a></li>
+      <li><a href="#blue-ocean">What's Different</a></li>
+      <li><a href="#how">How It Works</a></li>
+      <li><a href="#principles">Principles</a></li>
+      <li><button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme"><span class="sun">&#9728;&#65039;</span><span class="moon">&#9789;</span></button></li>
+      <li><button class="nav-cta" onclick="document.getElementById('waitlist').scrollIntoView({behavior:'smooth'})">Join Waitlist</button></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ═══════ HERO ═══════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge"><span class="pulse"></span>Built for macOS</div>
+    <h1>Your brain<br/><em>never forgets.</em></h1>
+    <p class="hero-sub">A personal AI operating system that lives in your menu bar. It listens, understands, remembers, and acts &mdash; so no decision is lost, no promise is broken, no pattern goes unseen.</p>
+    <div class="hero-buttons">
+      <button class="btn btn-primary" onclick="document.getElementById('waitlist').scrollIntoView({behavior:'smooth'})">Join the Waitlist &rarr;</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">See How It Works</button>
+    </div>
+
+    <!-- Interactive App Preview -->
+    <div class="app-preview">
+      <div class="app-frame">
+        <div class="app-chrome">
+          <div class="dot d-r"></div><div class="dot d-y"></div><div class="dot d-g"></div>
+          <span class="title">SudoBrain</span>
+        </div>
+        <div class="app-tabs">
+          <button class="app-tab active" data-view="today">Today</button>
+          <button class="app-tab" data-view="chat">Chat</button>
+          <button class="app-tab" data-view="meeting">Meeting</button>
+        </div>
+        <div class="app-content">
+          <!-- TODAY VIEW -->
+          <div class="app-view active" id="view-today">
+            <div class="today-greeting">Good morning</div>
+            <div class="today-date">Monday, March 31 &middot; 3 meetings &middot; 5 tasks due</div>
+            <div class="today-card">
+              <div class="today-card-header">Today's Schedule</div>
+              <div class="today-item"><span class="time">10:00</span><span>Sprint Planning &middot; 45 min</span><span class="badge badge-info" style="margin-left:auto">3 decisions pending</span></div>
+              <div class="today-item"><span class="time">14:00</span><span>Client X Review &middot; 60 min</span><span class="badge badge-warn" style="margin-left:auto">timeline unresolved</span></div>
+              <div class="today-item"><span class="time">16:00</span><span>1:1 with Alex &middot; 30 min</span><span class="badge badge-warn" style="margin-left:auto">task 2d overdue</span></div>
+            </div>
+            <div class="today-card">
+              <div class="today-card-header">Open Promises</div>
+              <div class="today-item"><span style="color:var(--warning)">&#9888;</span><span>You &rarr; Alex: Send arch doc</span><span class="badge badge-warn" style="margin-left:auto">5d overdue</span></div>
+              <div class="today-item"><span style="color:var(--warning)">&#9888;</span><span>You &rarr; Maya: Review mockups</span><span class="badge badge-warn" style="margin-left:auto">3d overdue</span></div>
+            </div>
+          </div>
+
+          <!-- CHAT VIEW -->
+          <div class="app-view" id="view-chat">
+            <div class="chat-msg user">
+              <div class="sender">You</div>
+              <div class="bubble">What did we decide about the caching strategy?</div>
+            </div>
+            <div class="chat-msg ai">
+              <div class="sender">SudoBrain</div>
+              <div class="bubble">In the March 22 architecture review with Alex and Maya, you decided to use <strong>Redis with a 15-min TTL</strong> for API responses. <span class="confidence conf-high">HIGH</span><br/><br/>Alex is implementing it &mdash; due April 5. <span class="confidence conf-high">HIGH</span><br/><br/>He mentioned "most of the schema work is done" in yesterday's standup. <span class="confidence conf-med">MEDIUM</span></div>
+              <div class="source">&#128206; Architecture Review, Mar 22 [12:34]</div>
+            </div>
+          </div>
+
+          <!-- MEETING VIEW -->
+          <div class="app-view" id="view-meeting">
+            <div class="meeting-header">
+              <div class="meeting-title">Sprint Planning</div>
+              <div class="meeting-score">&#9733; 72/100</div>
+            </div>
+            <div class="meeting-meta">
+              <span>March 31, 2026</span><span>45 min</span><span>4 participants</span>
+            </div>
+            <div class="meeting-section">
+              <h4>Decisions (3)</h4>
+              <div class="decision-item"><span class="decision-check">&#10003;</span> Session timeout policy: 7-day review</div>
+              <div class="decision-item"><span class="decision-check">&#10003;</span> Dashboard: Card-based layout (Option B)</div>
+              <div class="decision-item"><span class="decision-check">&#10003;</span> Demo date confirmed: April 4</div>
+            </div>
+            <div class="meeting-section">
+              <h4>Action Items (3)</h4>
+              <div class="action-item"><span class="action-circle"></span> Review session timeout policy <span class="action-assignee">Alex &middot; Apr 2</span></div>
+              <div class="action-item"><span class="action-circle"></span> Finalize mockups Option B <span class="action-assignee">Maya &middot; Apr 2</span></div>
+              <div class="action-item"><span class="action-circle"></span> Demo data seeding script <span class="action-assignee">Alex &middot; Apr 3</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ PILLARS ═══════ -->
+<section class="pillars" id="pillars">
+  <div class="container">
+    <div class="sec-label reveal">Seven Senses</div>
+    <h2 class="sec-title reveal">One brain. <em style="font-family:var(--font-display);font-style:italic;color:var(--primary)">Seven senses.</em></h2>
+    <p class="sec-desc reveal">SudoBrain extends your cognitive capabilities across seven intelligent pillars, working together as one unified system.</p>
+
+    <div class="pillars-grid">
+      <div class="pillar reveal reveal-d1">
+        <div class="pillar-icon pi-ears"><svg class="p-icon" viewBox="0 0 24 24"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
+        <h3>Ears &mdash; Capture</h3>
+        <p>Records meetings, voice notes, and system audio. Transcribes Tamil, English, and code-mixed speech with Sarvam AI. Your words, perfectly preserved.</p>
+      </div>
+      <div class="pillar reveal reveal-d2">
+        <div class="pillar-icon pi-eyes"><svg class="p-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <h3>Eyes &mdash; Context</h3>
+        <p>Sees your active app, calendar, focus mode, and time of day. Knows when to help and when to stay silent. Context-aware, not context-blind.</p>
+      </div>
+      <div class="pillar reveal reveal-d3">
+        <div class="pillar-icon pi-brain"><svg class="p-icon" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5.5 5 7.5V19h4v-2.5c3-2 5-4.5 5-7.5a7 7 0 0 0-7-7z"/><path d="M9 21h6"/></svg></div>
+        <h3>Brain &mdash; Understanding</h3>
+        <p>Extracts decisions, action items, people, and promises from everything you capture. Connects dots you didn't know existed.</p>
+      </div>
+      <div class="pillar reveal reveal-d1">
+        <div class="pillar-icon pi-memory"><svg class="p-icon" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+        <h3>Memory &mdash; Knowledge</h3>
+        <p>Temporal knowledge graph with semantic search. Three-tier hot/warm/cold architecture. Your personal Wikipedia that grows smarter daily.</p>
+      </div>
+      <div class="pillar reveal reveal-d2">
+        <div class="pillar-icon pi-mouth"><svg class="p-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>Mouth &mdash; Communication</h3>
+        <p>Morning briefings, meeting prep, proactive alerts. Speaks up when something important needs attention. Silent when it doesn't.</p>
+      </div>
+      <div class="pillar reveal reveal-d3">
+        <div class="pillar-icon pi-hands"><svg class="p-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+        <h3>Hands &mdash; Actions</h3>
+        <p>Drafts follow-ups, prepares calendar notes, and keeps reminders local. Turns thoughts into completed actions.</p>
+      </div>
+      <div class="pillar reveal reveal-d1">
+        <div class="pillar-icon pi-mirror"><svg class="p-icon" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+        <h3>Mirror &mdash; Insights</h3>
+        <p>Time allocation, relationship health, productivity patterns, work-life balance. See yourself clearly through your own data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ BLUE OCEAN ═══════ -->
+<section class="blue-ocean" id="blue-ocean">
+  <div class="container">
+    <div class="sec-label reveal">What's Different</div>
+    <h2 class="sec-title reveal">Features <em>nobody else builds.</em></h2>
+    <p class="sec-desc reveal">These aren't incremental improvements. They're capabilities that don't exist anywhere else.</p>
+
+    <div class="bo-grid">
+      <!-- Decision Journal -->
+      <div class="bo-card reveal reveal-d1">
+        <div class="bo-visual">
+          <div style="width:100%">
+            <div style="font-size:0.72rem;color:var(--text-3);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Decision Calibration Curve</div>
+            <div class="dj-bar" id="dj-chart">
+              <div style="text-align:center"><div class="dj-col" style="height:30px;background:var(--primary)"></div><div class="dj-label">3</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:42px;background:var(--primary)"></div><div class="dj-label">4</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:55px;background:var(--primary)"></div><div class="dj-label">5</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:62px;background:var(--primary)"></div><div class="dj-label">6</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:72px;background:var(--success)"></div><div class="dj-label">7</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:78px;background:var(--success)"></div><div class="dj-label">8</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:65px;background:var(--warning)"></div><div class="dj-label">9</div></div>
+              <div style="text-align:center"><div class="dj-col" style="height:50px;background:var(--error)"></div><div class="dj-label">10</div></div>
+            </div>
+            <div class="dj-legend">
+              <span><div class="dot" style="background:var(--success)"></div> Calibrated</span>
+              <span><div class="dot" style="background:var(--warning)"></div> Overconfident</span>
+              <span><div class="dot" style="background:var(--error)"></div> Blind spot</span>
+            </div>
+          </div>
+        </div>
+        <div class="bo-text">
+          <h3>Decision Journal</h3>
+          <p>Log every decision with confidence scores and reasoning. Track what actually happened months later. Build a personal calibration curve that reveals your blind spots.</p>
+        </div>
+      </div>
+
+      <!-- Promise Accountability -->
+      <div class="bo-card reveal reveal-d2">
+        <div class="bo-visual">
+          <div class="pl-flow" id="promise-flow">
+            <div class="pl-node active">Detected</div>
+            <div class="pl-arrow">&rarr;</div>
+            <div class="pl-node">Tracked</div>
+            <div class="pl-arrow">&rarr;</div>
+            <div class="pl-node">Reminded</div>
+            <div class="pl-arrow">&rarr;</div>
+            <div class="pl-node">Follow-up</div>
+            <div class="pl-arrow">&rarr;</div>
+            <div class="pl-node">Verified</div>
+          </div>
+        </div>
+        <div class="bo-text">
+          <h3>Promise Accountability</h3>
+          <p>Detects commitments from natural speech. Tracks them. Sends reminders. Drafts follow-ups. Verifies completion. Closes the gap between "noted" and "done."</p>
+        </div>
+      </div>
+
+      <!-- Meeting Effectiveness -->
+      <div class="bo-card reveal reveal-d1">
+        <div class="bo-visual">
+          <div style="width:100%">
+            <div class="ms-score-big" style="color:var(--success)">72</div>
+            <div class="ms-label">Sprint Planning &middot; Good</div>
+            <div class="ms-bars">
+              <div class="ms-bar-row"><span class="ms-bar-label">Decisions</span><div class="ms-bar-track"><div class="ms-bar-fill" style="width:80%;background:var(--primary)"></div></div></div>
+              <div class="ms-bar-row"><span class="ms-bar-label">Action items</span><div class="ms-bar-track"><div class="ms-bar-fill" style="width:70%;background:var(--primary)"></div></div></div>
+              <div class="ms-bar-row"><span class="ms-bar-label">Topic resolution</span><div class="ms-bar-track"><div class="ms-bar-fill" style="width:67%;background:var(--accent)"></div></div></div>
+              <div class="ms-bar-row"><span class="ms-bar-label">Participation</span><div class="ms-bar-track"><div class="ms-bar-fill" style="width:70%;background:var(--accent)"></div></div></div>
+              <div class="ms-bar-row"><span class="ms-bar-label">New information</span><div class="ms-bar-track"><div class="ms-bar-fill" style="width:70%;background:var(--success)"></div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="bo-text">
+          <h3>Meeting Effectiveness Score</h3>
+          <p>Every meeting scored 0&ndash;100 on decision density, action items, topic resolution, participation balance, and new information. Know exactly which meetings should've been an email.</p>
+        </div>
+      </div>
+
+      <!-- Proactive Silence -->
+      <div class="bo-card reveal reveal-d2">
+        <div class="bo-visual">
+          <div class="ps-demo">
+            <div class="ps-ring"><span class="ps-value">&minus;3</span></div>
+            <div class="ps-label-txt">Interruption Value Score</div>
+            <div class="ps-verdict ps-silent">Staying silent. Queued for later.</div>
+          </div>
+        </div>
+        <div class="bo-text">
+          <h3>Proactive Silence</h3>
+          <p>Calculates the "value of interruption" before every notification. If net-negative, stays silent. The opposite of engagement-optimized AI. Deep work is sacred.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ HOW IT WORKS ═══════ -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="sec-label reveal">How It Works</div>
+    <h2 class="sec-title reveal">Three steps. Zero friction.</h2>
+    <p class="sec-desc reveal">SudoBrain runs quietly in your menu bar. Always ready, never intrusive.</p>
+
+    <div class="how-steps">
+      <div class="how-step reveal reveal-d1">
+        <div class="how-num">1</div>
+        <h3>Capture</h3>
+        <p>Click the menu bar icon or press a hotkey. SudoBrain records audio, captures clipboard and screen context. Sarvam AI transcribes Tamil, English, and mixed speech in real-time.</p>
+        <div class="how-connector"></div>
+      </div>
+      <div class="how-step reveal reveal-d2">
+        <div class="how-num">2</div>
+        <h3>Understand</h3>
+        <p>Your local AI engine extracts decisions, action items, people, and promises. Builds your knowledge graph. Detects contradictions. Scores meeting effectiveness. All on your machine.</p>
+        <div class="how-connector"></div>
+      </div>
+      <div class="how-step reveal reveal-d3">
+        <div class="how-num">3</div>
+        <h3>Act</h3>
+        <p>Get morning briefings. Search your memory. Let SudoBrain create events, draft emails, send follow-ups, and surface warnings &mdash; all with tiered permissions you control.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ PRINCIPLES ═══════ -->
+<section class="principles" id="principles">
+  <div class="container">
+    <div class="sec-label reveal">Built Different</div>
+    <h2 class="sec-title reveal">Your data. Your machine. <em style="font-family:var(--font-display);font-style:italic;color:var(--primary)">Your rules.</em></h2>
+
+    <div class="pr-grid">
+      <div class="pr-card reveal reveal-d1">
+        <div class="pr-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>Local-First</h3>
+        <p>All data stays on your Mac. SQLite database, local audio files, on-device AI. Your thoughts never leave your machine.</p>
+      </div>
+      <div class="pr-card reveal reveal-d2">
+        <div class="pr-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+        </div>
+        <h3>Zero API Cost</h3>
+        <p>AI runs through your configured local model provider. Keep data local, avoid usage meters, and review extracted knowledge before acting on it.</p>
+      </div>
+      <div class="pr-card reveal reveal-d3">
+        <div class="pr-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--success)" stroke-width="1.8" stroke-linecap="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h3>Self-Improving</h3>
+        <p>Every correction becomes a learned rule. After 6 months, 500+ personal preferences absorbed. Gets smarter through use, not updates.</p>
+      </div>
+      <div class="pr-card reveal reveal-d4">
+        <div class="pr-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--warning)" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>The Sudo Principle</h3>
+        <p>4-tier permission model. Reads are free. Writes need soft approval. External actions need hard approval. Deletions are forbidden.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ CTA ═══════ -->
+<section class="cta" id="waitlist">
+  <div class="container">
+    <div class="cta-box">
+      <h2>Your brain deserves<br/>an upgrade.</h2>
+      <p class="sub">Join the waitlist. Be first to know when SudoBrain launches.</p>
+      <div class="cta-form">
+        <input type="email" placeholder="your@email.com"/>
+        <button class="btn btn-primary">Join Waitlist &rarr;</button>
+      </div>
+      <p class="cta-note">&#63743; Available for macOS Ventura and later &middot; sudobrain.com</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ FOOTER ═══════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">&copy; 2026 SudoBrain contributors.</div>
+    <ul class="footer-links">
+      <li><a href="#pillars">Features</a></li>
+      <li><a href="#blue-ocean">What's Different</a></li>
+      <li><a href="#how">How It Works</a></li>
+      <li><a href="#principles">Principles</a></li>
+    </ul>
+  </div>
+</footer>
+
+<!-- ═══════ SCRIPTS ═══════ -->
+<script>
+// Theme
+function toggleTheme(){
+  const h=document.documentElement;
+  const n=h.getAttribute('data-theme')==='dark'?'light':'dark';
+  h.setAttribute('data-theme',n);
+  localStorage.setItem('sb-theme',n);
+}
+const saved=localStorage.getItem('sb-theme');
+if(saved)document.documentElement.setAttribute('data-theme',saved);
+
+// Scroll Reveal
+const obs=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')});
+},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+// App Tab Switching
+document.querySelectorAll('.app-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.app-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.app-view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-'+tab.dataset.view).classList.add('active');
+  });
+});
+
+// Promise Flow Animation
+let promiseStep=0;
+setInterval(()=>{
+  const nodes=document.querySelectorAll('#promise-flow .pl-node');
+  nodes.forEach(n=>n.classList.remove('active'));
+  nodes[promiseStep].classList.add('active');
+  promiseStep=(promiseStep+1)%nodes.length;
+},1200);
+
+// Animate meeting score bars on scroll
+const msObs=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.querySelectorAll('.ms-bar-fill').forEach(bar=>{
+        bar.style.width=bar.style.width; // trigger reflow
+      });
+    }
+  });
+},{threshold:0.3});
+document.querySelectorAll('.ms-bars').forEach(el=>msObs.observe(el));
+</script>
+
+</body>
+</html>

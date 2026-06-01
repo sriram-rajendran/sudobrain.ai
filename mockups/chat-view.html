@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SudoBrain — Chat View</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root {
+    --bg-primary: #1C1C1E; --bg-secondary: #2C2C2E; --bg-tertiary: #3A3A3C;
+    --bg-elevated: #48484A; --fg-primary: #FFFFFF;
+    --fg-secondary: rgba(235,235,245,0.6); --fg-tertiary: rgba(235,235,245,0.3);
+    --separator: rgba(235,235,245,0.08); --accent: #0A84FF;
+    --accent-dim: rgba(10,132,255,0.15); --warning: #FF9F0A; --success: #30D158;
+  }
+  .light {
+    --bg-primary: #FFFFFF; --bg-secondary: #F2F2F7; --bg-tertiary: #E5E5EA;
+    --fg-primary: #000000; --fg-secondary: rgba(60,60,67,0.6);
+    --fg-tertiary: rgba(60,60,67,0.3); --separator: rgba(60,60,67,0.08);
+    --accent: #007AFF; --accent-dim: rgba(0,122,255,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    background: #0D0D0D; display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; padding: 40px; color: var(--fg-primary); -webkit-font-smoothing: antialiased;
+  }
+  .win { width: 1100px; height: 720px; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.08);
+    display: flex; flex-direction: column; background: var(--bg-primary); }
+  .tb { height: 52px; background: var(--bg-secondary); border-bottom: 0.5px solid var(--separator);
+    display: flex; align-items: center; padding: 0 16px; flex-shrink: 0; }
+  .tl-g { display: flex; gap: 8px; }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl-c { background: #FF5F57; } .tl-m { background: #FEBC2E; } .tl-x { background: #28C840; }
+  .tb-c { flex:1; text-align:center; font-size:13px; font-weight:600; color: var(--fg-secondary); }
+  .tb-a { display:flex; gap:4px; align-items:center; }
+  .tb-b { background:none; border:none; color:var(--fg-secondary); cursor:pointer;
+    padding:6px 8px; border-radius:8px; transition:background 0.15s; display:flex; align-items:center; gap:5px;
+    font-size:12px; font-family:inherit; }
+  .tb-b:hover { background: var(--bg-tertiary); color: var(--fg-primary); }
+  .tb-b i { font-size: 14px; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sb { width:220px; background:var(--bg-secondary); border-right:0.5px solid var(--separator);
+    padding:8px; overflow-y:auto; flex-shrink:0; display:flex; flex-direction:column; }
+  .sb-s { margin-bottom: 4px; }
+  .sb-l { font-size:11px; font-weight:600; color:var(--fg-tertiary); text-transform:uppercase;
+    letter-spacing:0.5px; padding:8px 12px 4px; }
+  .si { display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:8px;
+    cursor:pointer; font-size:13px; color:var(--fg-secondary); transition:all 0.15s; position:relative; }
+  .si:hover { background:var(--bg-tertiary); color:var(--fg-primary); }
+  .si.a { background:var(--accent-dim); color:var(--accent); }
+  .si i { font-size:15px; flex-shrink:0; width:18px; text-align:center; }
+  .si .bd { position:absolute; right:8px; background:var(--accent); color:white;
+    font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; }
+  .sb-sp { flex:1; }
+  .sb-sh { padding:8px 12px; font-size:11px; color:var(--fg-tertiary); display:flex; align-items:center; gap:8px; }
+  .kbd { background:var(--bg-tertiary); padding:1px 5px; border-radius:3px; font-size:10px; }
+
+  /* Chat Area */
+  .chat-area { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .chat-header { padding:16px 24px 12px; border-bottom:0.5px solid var(--separator); }
+  .chat-header h2 { font-size:16px; font-weight:600; color:var(--fg-primary); }
+  .messages { flex:1; overflow-y:auto; padding:20px 24px; display:flex; flex-direction:column; gap:20px; }
+
+  .msg { max-width: 85%; }
+  .msg.user { align-self: flex-end; }
+  .msg.brain { align-self: flex-start; }
+
+  .msg-content { padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.6; }
+  .msg.user .msg-content { background:var(--accent); color:white; border-bottom-right-radius:4px; }
+  .msg.brain .msg-content { background:var(--bg-secondary); color:var(--fg-primary); border-bottom-left-radius:4px; }
+
+  .msg-meta { font-size:11px; color:var(--fg-tertiary); margin-top:4px; padding:0 4px; }
+  .msg.user .msg-meta { text-align:right; }
+
+  .confidence { font-size:11px; font-weight:500; padding:2px 6px; border-radius:4px; margin-left:4px; }
+  .confidence.high { background:rgba(48,209,88,0.15); color:var(--success); }
+  .confidence.medium { background:rgba(255,159,10,0.15); color:var(--warning); }
+  .confidence.low { background:rgba(235,235,245,0.1); color:var(--fg-tertiary); font-style:italic; }
+
+  .source-link { font-size:12px; color:var(--accent); text-decoration:none; display:inline-flex;
+    align-items:center; gap:4px; margin-top:8px; }
+  .source-link:hover { text-decoration:underline; }
+  .source-link i { font-size:11px; }
+
+  .brain-list { margin:8px 0; padding-left:20px; }
+  .brain-list li { margin-bottom:4px; font-size:14px; line-height:1.5; }
+
+  /* Input Bar */
+  .input-bar { padding:12px 24px 16px; border-top:0.5px solid var(--separator);
+    display:flex; gap:8px; align-items:flex-end; }
+  .input-field { flex:1; background:var(--bg-secondary); border:1px solid var(--separator);
+    border-radius:10px; padding:10px 14px; font-size:14px; color:var(--fg-primary);
+    font-family:inherit; outline:none; resize:none; min-height:40px; max-height:120px; }
+  .input-field:focus { border-color:var(--accent); }
+  .input-field::placeholder { color:var(--fg-tertiary); }
+  .input-btn { width:36px; height:36px; border-radius:8px; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:background 0.15s; }
+  .input-btn.mic { background:var(--bg-secondary); color:var(--fg-secondary); }
+  .input-btn.mic:hover { background:var(--bg-tertiary); color:var(--fg-primary); }
+  .input-btn.send { background:var(--accent); color:white; }
+  .input-btn.send:hover { opacity:0.9; }
+  .input-btn i { font-size:16px; }
+
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--fg-tertiary); border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="win" id="app">
+  <div class="tb">
+    <div class="tl-g"><div class="tl tl-c"></div><div class="tl tl-m"></div><div class="tl tl-x"></div></div>
+    <div class="tb-c">SudoBrain</div>
+    <div class="tb-a">
+      <button class="tb-b"><i class="ph-light ph-record"></i></button>
+      <button class="tb-b"><i class="ph-light ph-magnifying-glass"></i></button>
+      <button class="tb-b" onclick="document.getElementById('app').classList.toggle('light')"><i class="ph-light ph-sun-dim"></i></button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sb">
+      <div class="sb-s">
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-calendar-check"></i> Today</div>
+        <div class="si a" onclick="selectItem(this)"><i class="ph-light ph-chat-circle"></i> Chat</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-tray"></i> Inbox <span class="bd">3</span></div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Knowledge</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-users-three"></i> Meetings</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-user-circle"></i> People</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-git-branch"></i> Decisions</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-check-circle"></i> Tasks <span class="bd">5</span></div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Projects</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-folder-simple"></i> Project Atlas</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-folder-simple"></i> Mobile App</div>
+        <div class="si" onclick="selectItem(this)"><i class="ph-light ph-folder-simple"></i> Personal</div>
+      </div>
+      <div class="sb-sp"></div>
+      <div class="si" onclick="selectItem(this)"><i class="ph-light ph-gear-six"></i> Settings</div>
+      <div class="sb-sh"><span class="kbd">&#8984;</span><span class="kbd">K</span> Search everything</div>
+    </div>
+
+    <div class="chat-area">
+      <div class="chat-header"><h2>Chat with SudoBrain</h2></div>
+      <div class="messages">
+
+        <div class="msg user">
+          <div class="msg-content">What did we decide about the caching strategy?</div>
+          <div class="msg-meta">2 min ago</div>
+        </div>
+
+        <div class="msg brain">
+          <div class="msg-content">
+            In the March 22 architecture review with Alex and Maya, you decided to use
+            <strong>Redis with a 15-minute TTL</strong> for API response caching.
+            <span class="confidence high">HIGH</span>
+            <br><br>
+            Key details from that discussion:
+            <ul class="brain-list">
+              <li>Alex proposed Redis over Memcached due to persistence support</li>
+              <li>TTL set to 15 minutes as a balance between freshness and performance</li>
+              <li>Cache invalidation will use pub/sub pattern on write operations</li>
+            </ul>
+            Alex is implementing this — due April 5. Currently 2 days overdue.
+            <span class="confidence high">HIGH</span>
+            <br>
+            <a class="source-link" href="#"><i class="ph-light ph-link"></i> Architecture Review, Mar 22 at 12:34</a>
+          </div>
+          <div class="msg-meta">SudoBrain</div>
+        </div>
+
+        <div class="msg user">
+          <div class="msg-content">What about the database migration? Is that related?</div>
+          <div class="msg-meta">1 min ago</div>
+        </div>
+
+        <div class="msg brain">
+          <div class="msg-content">
+            The PostgreSQL migration was decided in the same meeting. It's a separate workstream but related — the caching layer sits in front of the new PostgreSQL queries.
+            <span class="confidence high">HIGH</span>
+            <br><br>
+            Migration status based on Alex's standup yesterday: "most of the schema work is done."
+            <span class="confidence medium">MEDIUM — inferred from standup context</span>
+            <br><br>
+            Estimated completion: mid-April based on similar past migrations.
+            <span class="confidence low">LOW — estimated</span>
+            <br>
+            <a class="source-link" href="#"><i class="ph-light ph-link"></i> Architecture Review, Mar 22 at 08:15</a>
+            <a class="source-link" href="#"><i class="ph-light ph-link"></i> Standup, Mar 30 at 10:02</a>
+          </div>
+          <div class="msg-meta">SudoBrain</div>
+        </div>
+
+        <div class="msg user">
+          <div class="msg-content">Should I follow up with Alex about the delay?</div>
+          <div class="msg-meta">just now</div>
+        </div>
+
+        <div class="msg brain">
+          <div class="msg-content">
+            You have a 1:1 with Alex today at 16:00 — that would be a natural time to bring it up.
+            <span class="confidence high">HIGH</span>
+            <br><br>
+            Context for the conversation:
+            <ul class="brain-list">
+              <li>Auth task is 2 days overdue (due March 29)</li>
+              <li>You also promised to send him the architecture doc — that's 5 days overdue on your side</li>
+              <li>His daughter has exams this week — he may be under personal pressure</li>
+            </ul>
+            <span class="confidence medium">MEDIUM — personal note from Mar 22 meeting</span>
+            <br><br>
+            Want me to draft talking points for the 1:1?
+          </div>
+          <div class="msg-meta">SudoBrain</div>
+        </div>
+
+      </div>
+
+      <div class="input-bar">
+        <button class="input-btn mic"><i class="ph-light ph-microphone"></i></button>
+        <textarea class="input-field" placeholder="Ask anything..." rows="1"></textarea>
+        <button class="input-btn send"><i class="ph-light ph-paper-plane-tilt"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function selectItem(el) {
+  document.querySelectorAll('.si').forEach(i => i.classList.remove('a'));
+  el.classList.add('a');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SudoBrain — Tasks</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root{--bg-primary:#1C1C1E;--bg-secondary:#2C2C2E;--bg-tertiary:#3A3A3C;
+    --fg-primary:#FFFFFF;--fg-secondary:rgba(235,235,245,0.6);--fg-tertiary:rgba(235,235,245,0.3);
+    --separator:rgba(235,235,245,0.08);--accent:#0A84FF;--accent-dim:rgba(10,132,255,0.15);
+    --warning:#FF9F0A;--success:#30D158;--error:#FF453A;}
+  .light{--bg-primary:#FFFFFF;--bg-secondary:#F2F2F7;--bg-tertiary:#E5E5EA;
+    --fg-primary:#000000;--fg-secondary:rgba(60,60,67,0.6);--fg-tertiary:rgba(60,60,67,0.3);
+    --separator:rgba(60,60,67,0.08);--accent:#007AFF;--accent-dim:rgba(0,122,255,0.1);}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+    background:#0D0D0D;display:flex;justify-content:center;align-items:center;
+    min-height:100vh;padding:40px;color:var(--fg-primary);-webkit-font-smoothing:antialiased;}
+  .win{width:1100px;height:720px;border-radius:10px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);
+    display:flex;flex-direction:column;background:var(--bg-primary);}
+  .tb{height:52px;background:var(--bg-secondary);border-bottom:0.5px solid var(--separator);
+    display:flex;align-items:center;padding:0 16px;flex-shrink:0;}
+  .tl-g{display:flex;gap:8px;}.tl{width:12px;height:12px;border-radius:50%;}
+  .tl-c{background:#FF5F57;}.tl-m{background:#FEBC2E;}.tl-x{background:#28C840;}
+  .tb-c{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--fg-secondary);}
+  .tb-a{display:flex;gap:4px;align-items:center;}
+  .tb-b{background:none;border:none;color:var(--fg-secondary);cursor:pointer;padding:6px 8px;
+    border-radius:8px;transition:background 0.15s;display:flex;align-items:center;font-family:inherit;}
+  .tb-b:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .tb-b i{font-size:14px;}
+  .main{display:flex;flex:1;overflow:hidden;}
+
+  .sb{width:220px;background:var(--bg-secondary);border-right:0.5px solid var(--separator);
+    padding:8px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;}
+  .sb-s{margin-bottom:4px;}
+  .sb-l{font-size:11px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px 4px;}
+  .si{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;
+    cursor:pointer;font-size:13px;color:var(--fg-secondary);transition:all 0.15s;position:relative;}
+  .si:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .si.a{background:var(--accent-dim);color:var(--accent);}
+  .si i{font-size:15px;flex-shrink:0;width:18px;text-align:center;}
+  .si .bd{position:absolute;right:8px;background:var(--accent);color:white;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;}
+  .sb-sp{flex:1;}
+
+  /* Tasks Content */
+  .tasks-area{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+  .tasks-header{padding:20px 24px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  .tasks-header h2{font-size:22px;font-weight:700;color:var(--fg-primary);}
+  .tasks-toolbar{display:flex;gap:8px;align-items:center;}
+  .filter-btn{background:var(--bg-secondary);border:1px solid var(--separator);border-radius:6px;
+    padding:5px 10px;font-size:12px;color:var(--fg-secondary);cursor:pointer;font-family:inherit;transition:all 0.15s;}
+  .filter-btn:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .filter-btn.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent);}
+  .add-btn{background:var(--accent);border:none;border-radius:6px;padding:5px 12px;
+    font-size:12px;color:white;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
+  .add-btn:hover{opacity:0.9;}
+  .add-btn i{font-size:12px;}
+
+  .tasks-stats{padding:0 24px 16px;display:flex;gap:16px;font-size:12px;color:var(--fg-tertiary);}
+  .tasks-stats span{display:flex;align-items:center;gap:4px;}
+  .stat-dot{width:6px;height:6px;border-radius:50%;}
+
+  .tasks-list{flex:1;overflow-y:auto;padding:0 24px 24px;}
+  .task-group{margin-bottom:16px;}
+  .task-group-label{font-size:11px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;
+    letter-spacing:0.5px;padding:8px 0 6px;border-bottom:0.5px solid var(--separator);margin-bottom:4px;}
+
+  .task-row{display:flex;align-items:center;gap:10px;padding:10px 8px;border-radius:8px;
+    cursor:pointer;transition:background 0.15s;border-bottom:0.5px solid var(--separator);}
+  .task-row:hover{background:var(--bg-secondary);}
+  .task-row:last-child{border-bottom:none;}
+  .task-check{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--fg-tertiary);
+    flex-shrink:0;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;}
+  .task-check:hover{border-color:var(--accent);}
+  .task-check.done{background:var(--success);border-color:var(--success);}
+  .task-check.done::after{content:'';width:6px;height:3px;border-left:1.5px solid white;
+    border-bottom:1.5px solid white;transform:rotate(-45deg);margin-top:-1px;}
+  .task-body{flex:1;min-width:0;}
+  .task-title{font-size:14px;color:var(--fg-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .task-title.done-text{color:var(--fg-tertiary);text-decoration:line-through;}
+  .task-sub{font-size:11px;color:var(--fg-tertiary);margin-top:1px;display:flex;gap:8px;align-items:center;}
+  .tag{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--bg-tertiary);color:var(--fg-secondary);}
+  .priority-dot{width:6px;height:6px;border-radius:50%;}
+  .priority-dot.high{background:var(--error);}
+  .priority-dot.normal{background:var(--accent);}
+  .priority-dot.low{background:var(--fg-tertiary);}
+  .task-due{font-size:12px;font-weight:500;flex-shrink:0;white-space:nowrap;}
+  .task-due.overdue{color:var(--warning);}
+  .task-due.today{color:var(--accent);}
+  .task-due.upcoming{color:var(--fg-tertiary);}
+  .task-due.done{color:var(--success);}
+
+  ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--fg-tertiary);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="win" id="app">
+  <div class="tb">
+    <div class="tl-g"><div class="tl tl-c"></div><div class="tl tl-m"></div><div class="tl tl-x"></div></div>
+    <div class="tb-c">SudoBrain</div>
+    <div class="tb-a">
+      <button class="tb-b"><i class="ph-light ph-record"></i></button>
+      <button class="tb-b"><i class="ph-light ph-magnifying-glass"></i></button>
+      <button class="tb-b" onclick="document.getElementById('app').classList.toggle('light')"><i class="ph-light ph-sun-dim"></i></button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sb">
+      <div class="sb-s">
+        <div class="si"><i class="ph-light ph-calendar-check"></i> Today</div>
+        <div class="si"><i class="ph-light ph-chat-circle"></i> Chat</div>
+        <div class="si"><i class="ph-light ph-tray"></i> Inbox</div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Knowledge</div>
+        <div class="si"><i class="ph-light ph-users-three"></i> Meetings</div>
+        <div class="si"><i class="ph-light ph-user-circle"></i> People</div>
+        <div class="si"><i class="ph-light ph-git-branch"></i> Decisions</div>
+        <div class="si a"><i class="ph-light ph-check-circle"></i> Tasks <span class="bd">5</span></div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Projects</div>
+        <div class="si"><i class="ph-light ph-folder-simple"></i> Project Atlas</div>
+        <div class="si"><i class="ph-light ph-folder-simple"></i> Mobile App</div>
+        <div class="si"><i class="ph-light ph-folder-simple"></i> Personal</div>
+      </div>
+      <div class="sb-sp"></div>
+      <div class="si"><i class="ph-light ph-gear-six"></i> Settings</div>
+    </div>
+
+    <div class="tasks-area">
+      <div class="tasks-header">
+        <h2>Tasks</h2>
+        <div class="tasks-toolbar">
+          <button class="filter-btn active">All</button>
+          <button class="filter-btn">Work</button>
+          <button class="filter-btn">Personal</button>
+          <button class="filter-btn">Overdue</button>
+          <button class="add-btn"><i class="ph-light ph-plus"></i> Add task</button>
+        </div>
+      </div>
+
+      <div class="tasks-stats">
+        <span><span class="stat-dot" style="background:var(--warning);"></span> 2 overdue</span>
+        <span><span class="stat-dot" style="background:var(--accent);"></span> 3 due today</span>
+        <span><span class="stat-dot" style="background:var(--fg-tertiary);"></span> 7 upcoming</span>
+        <span><span class="stat-dot" style="background:var(--success);"></span> 8 completed this week</span>
+      </div>
+
+      <div class="tasks-list">
+        <div class="task-group">
+          <div class="task-group-label">Overdue</div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot high"></div>
+            <div class="task-body">
+              <div class="task-title">Send architecture doc to Maya</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span> Promise to Maya</div>
+            </div>
+            <div class="task-due overdue">5d overdue</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot high"></div>
+            <div class="task-body">
+              <div class="task-title">Follow up with Vikram on timeline</div>
+              <div class="task-sub"><span class="tag">Client X</span> From meeting Mar 25</div>
+            </div>
+            <div class="task-due overdue">3d overdue</div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-label">Due Today</div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot high"></div>
+            <div class="task-body">
+              <div class="task-title">Review Alex's PR #142</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span> Assigned by Alex</div>
+            </div>
+            <div class="task-due today">Due today</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot normal"></div>
+            <div class="task-body">
+              <div class="task-title">Prepare sprint planning agenda</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span></div>
+            </div>
+            <div class="task-due today">Due today</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot normal"></div>
+            <div class="task-body">
+              <div class="task-title">Call dentist</div>
+              <div class="task-sub"><span class="tag">Personal</span></div>
+            </div>
+            <div class="task-due today">Due today</div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-label">This Week</div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot normal"></div>
+            <div class="task-body">
+              <div class="task-title">Update project timeline for client demo</div>
+              <div class="task-sub"><span class="tag">Client X</span></div>
+            </div>
+            <div class="task-due upcoming">Apr 2</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot normal"></div>
+            <div class="task-body">
+              <div class="task-title">Prepare demo data seeding script</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span></div>
+            </div>
+            <div class="task-due upcoming">Apr 3</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot low"></div>
+            <div class="task-body">
+              <div class="task-title">Research vector database options</div>
+              <div class="task-sub"><span class="tag">SudoBrain</span></div>
+            </div>
+            <div class="task-due upcoming">Apr 4</div>
+          </div>
+          <div class="task-row">
+            <div class="task-check"></div>
+            <div class="priority-dot low"></div>
+            <div class="task-body">
+              <div class="task-title">Buy gift for mom's birthday</div>
+              <div class="task-sub"><span class="tag">Personal</span></div>
+            </div>
+            <div class="task-due upcoming">Apr 4</div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-label">Completed This Week</div>
+          <div class="task-row" style="opacity:0.5;">
+            <div class="task-check done"></div>
+            <div class="priority-dot" style="background:transparent;"></div>
+            <div class="task-body">
+              <div class="task-title done-text">Set up PostgreSQL migration scripts</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span></div>
+            </div>
+            <div class="task-due done">Done</div>
+          </div>
+          <div class="task-row" style="opacity:0.5;">
+            <div class="task-check done"></div>
+            <div class="priority-dot" style="background:transparent;"></div>
+            <div class="task-body">
+              <div class="task-title done-text">Review Redis caching proposal</div>
+              <div class="task-sub"><span class="tag">Project Atlas</span></div>
+            </div>
+            <div class="task-due done">Done</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

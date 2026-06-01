@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6C63FF"/>
+      <stop offset="50%" style="stop-color:#7B68EE"/>
+      <stop offset="100%" style="stop-color:#9B59B6"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6C63FF;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#9B59B6;stop-opacity:0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="110" ry="110" fill="url(#bgGrad)"/>
+
+  <!-- Subtle glow behind the mark -->
+  <circle cx="256" cy="240" r="140" fill="url(#glowGrad)"/>
+
+  <!-- Terminal prompt chevron > morphing into neural paths -->
+  <g filter="url(#glow)">
+    <!-- Main chevron stroke — the "sudo >" prompt -->
+    <path d="M 130 170 L 230 250 L 130 330"
+          fill="none" stroke="url(#accentGrad)" stroke-width="28"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Neural branch 1: top-right from chevron tip -->
+    <path d="M 230 250 L 310 200 Q 340 185 370 195"
+          fill="none" stroke="url(#accentGrad)" stroke-width="16"
+          stroke-linecap="round"/>
+
+    <!-- Neural branch 2: middle-right from chevron tip -->
+    <path d="M 230 250 L 340 250 Q 365 250 380 240"
+          fill="none" stroke="url(#accentGrad)" stroke-width="16"
+          stroke-linecap="round"/>
+
+    <!-- Neural branch 3: bottom-right from chevron tip -->
+    <path d="M 230 250 L 310 300 Q 340 315 370 305"
+          fill="none" stroke="url(#accentGrad)" stroke-width="16"
+          stroke-linecap="round"/>
+
+    <!-- Synapse nodes (dots at neural endpoints) -->
+    <circle cx="370" cy="195" r="10" fill="#6C63FF"/>
+    <circle cx="380" cy="240" r="8" fill="#7B68EE"/>
+    <circle cx="370" cy="305" r="10" fill="#9B59B6"/>
+
+    <!-- Secondary smaller nodes (inner network) -->
+    <circle cx="310" cy="200" r="5" fill="#6C63FF" opacity="0.7"/>
+    <circle cx="340" cy="250" r="5" fill="#7B68EE" opacity="0.7"/>
+    <circle cx="310" cy="300" r="5" fill="#9B59B6" opacity="0.7"/>
+
+    <!-- Cursor blink line -->
+    <rect x="260" y="238" width="24" height="24" rx="2" fill="#6C63FF" opacity="0.6"/>
+  </g>
+
+  <!-- "SUDOBRAIN" text at bottom -->
+  <text x="256" y="410" text-anchor="middle"
+        font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif"
+        font-size="42" font-weight="700" letter-spacing="8"
+        fill="white" opacity="0.9">
+    SUDOBRAIN
+  </text>
+
+  <!-- Thin accent line under text -->
+  <line x1="150" y1="425" x2="362" y2="425"
+        stroke="url(#accentGrad)" stroke-width="2" opacity="0.5"/>
+</svg>

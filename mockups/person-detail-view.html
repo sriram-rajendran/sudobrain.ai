@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SudoBrain — Person Detail</title>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  :root{--bg-primary:#1C1C1E;--bg-secondary:#2C2C2E;--bg-tertiary:#3A3A3C;
+    --fg-primary:#FFFFFF;--fg-secondary:rgba(235,235,245,0.6);--fg-tertiary:rgba(235,235,245,0.3);
+    --separator:rgba(235,235,245,0.08);--accent:#0A84FF;--accent-dim:rgba(10,132,255,0.15);
+    --warning:#FF9F0A;--success:#30D158;}
+  .light{--bg-primary:#FFFFFF;--bg-secondary:#F2F2F7;--bg-tertiary:#E5E5EA;
+    --fg-primary:#000000;--fg-secondary:rgba(60,60,67,0.6);--fg-tertiary:rgba(60,60,67,0.3);
+    --separator:rgba(60,60,67,0.08);--accent:#007AFF;--accent-dim:rgba(0,122,255,0.1);}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+    background:#0D0D0D;display:flex;justify-content:center;align-items:center;
+    min-height:100vh;padding:40px;color:var(--fg-primary);-webkit-font-smoothing:antialiased;}
+  .win{width:1100px;height:720px;border-radius:10px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 0.5px rgba(255,255,255,0.08);
+    display:flex;flex-direction:column;background:var(--bg-primary);}
+  .tb{height:52px;background:var(--bg-secondary);border-bottom:0.5px solid var(--separator);
+    display:flex;align-items:center;padding:0 16px;flex-shrink:0;}
+  .tl-g{display:flex;gap:8px;}.tl{width:12px;height:12px;border-radius:50%;}
+  .tl-c{background:#FF5F57;}.tl-m{background:#FEBC2E;}.tl-x{background:#28C840;}
+  .tb-c{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--fg-secondary);}
+  .tb-a{display:flex;gap:4px;align-items:center;}
+  .tb-b{background:none;border:none;color:var(--fg-secondary);cursor:pointer;padding:6px 8px;
+    border-radius:8px;transition:background 0.15s;display:flex;align-items:center;font-size:12px;font-family:inherit;}
+  .tb-b:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .tb-b i{font-size:14px;}
+  .main{display:flex;flex:1;overflow:hidden;}
+
+  .sb{width:220px;background:var(--bg-secondary);border-right:0.5px solid var(--separator);
+    padding:8px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;}
+  .sb-s{margin-bottom:4px;}
+  .sb-l{font-size:11px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px 4px;}
+  .si{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;
+    cursor:pointer;font-size:13px;color:var(--fg-secondary);transition:all 0.15s;}
+  .si:hover{background:var(--bg-tertiary);color:var(--fg-primary);}
+  .si.a{background:var(--accent-dim);color:var(--accent);}
+  .si i{font-size:15px;flex-shrink:0;width:18px;text-align:center;}
+  .sb-sp{flex:1;}
+
+  /* People List */
+  .ppl-list{width:260px;border-right:0.5px solid var(--separator);overflow-y:auto;padding:8px;}
+  .ppl-header{padding:8px 8px 12px;font-size:12px;font-weight:600;color:var(--fg-secondary);text-transform:uppercase;letter-spacing:0.5px;}
+  .ppl-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;transition:background 0.15s;}
+  .ppl-item:hover{background:var(--bg-tertiary);}
+  .ppl-item.active{background:var(--accent-dim);}
+  .ppl-avatar{width:32px;height:32px;border-radius:50%;background:var(--bg-tertiary);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--fg-secondary);flex-shrink:0;}
+  .ppl-info{flex:1;min-width:0;}
+  .ppl-name{font-size:13px;font-weight:500;color:var(--fg-primary);}
+  .ppl-role{font-size:11px;color:var(--fg-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ppl-last{font-size:10px;color:var(--fg-tertiary);flex-shrink:0;}
+
+  /* Detail */
+  .detail{flex:1;overflow-y:auto;padding:24px 28px;}
+  .profile-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
+  .profile-avatar{width:56px;height:56px;border-radius:50%;background:var(--bg-tertiary);
+    display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:var(--fg-secondary);}
+  .profile-info h1{font-size:22px;font-weight:700;color:var(--fg-primary);margin-bottom:2px;}
+  .profile-info .role{font-size:14px;color:var(--fg-secondary);}
+
+  .health-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+  .health-label{font-size:12px;color:var(--fg-secondary);}
+  .health-track{width:120px;height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;}
+  .health-fill{height:100%;border-radius:2px;}
+  .health-score{font-size:12px;font-weight:600;}
+
+  .stats-row{display:flex;gap:24px;margin-bottom:20px;padding:12px 0;border-bottom:0.5px solid var(--separator);}
+  .stat{display:flex;flex-direction:column;}
+  .stat-value{font-size:15px;font-weight:600;color:var(--fg-primary);}
+  .stat-label{font-size:11px;color:var(--fg-tertiary);}
+
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--separator);margin-bottom:20px;}
+  .tab{padding:8px 16px;font-size:13px;color:var(--fg-tertiary);cursor:pointer;
+    border-bottom:2px solid transparent;transition:all 0.15s;font-weight:500;}
+  .tab:hover{color:var(--fg-secondary);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  .timeline-item{display:flex;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--separator);}
+  .timeline-item:last-child{border-bottom:none;}
+  .timeline-date{font-size:12px;color:var(--fg-tertiary);width:56px;flex-shrink:0;font-variant-numeric:tabular-nums;}
+  .timeline-content{flex:1;}
+  .timeline-title{font-size:14px;font-weight:500;color:var(--fg-primary);margin-bottom:2px;}
+  .timeline-detail{font-size:13px;color:var(--fg-secondary);line-height:1.4;}
+  .timeline-dur{font-size:11px;color:var(--fg-tertiary);}
+
+  .section{margin-bottom:20px;}
+  .section-title{font-size:12px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;
+    letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .section-title i{font-size:12px;}
+  .note-item{padding:10px 12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:8px;
+    font-size:13px;color:var(--fg-secondary);line-height:1.4;}
+
+  .promise-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--separator);}
+  .promise-item:last-child{border-bottom:none;}
+  .promise-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .promise-dot.overdue{background:var(--warning);}
+  .promise-dot.pending{background:var(--fg-tertiary);}
+  .promise-text{font-size:14px;color:var(--fg-primary);flex:1;}
+  .promise-text strong{font-weight:500;}
+  .promise-age{font-size:12px;flex-shrink:0;}
+  .promise-age.overdue{color:var(--warning);}
+  .promise-age.pending{color:var(--fg-tertiary);}
+
+  ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--fg-tertiary);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="win" id="app">
+  <div class="tb">
+    <div class="tl-g"><div class="tl tl-c"></div><div class="tl tl-m"></div><div class="tl tl-x"></div></div>
+    <div class="tb-c">SudoBrain</div>
+    <div class="tb-a">
+      <button class="tb-b"><i class="ph-light ph-record"></i></button>
+      <button class="tb-b"><i class="ph-light ph-magnifying-glass"></i></button>
+      <button class="tb-b" onclick="document.getElementById('app').classList.toggle('light')"><i class="ph-light ph-sun-dim"></i></button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sb">
+      <div class="sb-s">
+        <div class="si"><i class="ph-light ph-calendar-check"></i> Today</div>
+        <div class="si"><i class="ph-light ph-chat-circle"></i> Chat</div>
+        <div class="si"><i class="ph-light ph-tray"></i> Inbox</div>
+      </div>
+      <div class="sb-s">
+        <div class="sb-l">Knowledge</div>
+        <div class="si"><i class="ph-light ph-users-three"></i> Meetings</div>
+        <div class="si a"><i class="ph-light ph-user-circle"></i> People</div>
+        <div class="si"><i class="ph-light ph-git-branch"></i> Decisions</div>
+        <div class="si"><i class="ph-light ph-check-circle"></i> Tasks</div>
+      </div>
+      <div class="sb-sp"></div>
+      <div class="si"><i class="ph-light ph-gear-six"></i> Settings</div>
+    </div>
+
+    <!-- People List -->
+    <div class="ppl-list">
+      <div class="ppl-header">People (12)</div>
+      <div class="ppl-item active">
+        <div class="ppl-avatar">R</div>
+        <div class="ppl-info"><div class="ppl-name">Alex Rivera</div><div class="ppl-role">Engineering Lead</div></div>
+        <div class="ppl-last">2d</div>
+      </div>
+      <div class="ppl-item">
+        <div class="ppl-avatar">P</div>
+        <div class="ppl-info"><div class="ppl-name">Maya Chen</div><div class="ppl-role">Design Lead</div></div>
+        <div class="ppl-last">3d</div>
+      </div>
+      <div class="ppl-item">
+        <div class="ppl-avatar">V</div>
+        <div class="ppl-info"><div class="ppl-name">Vikram Patel</div><div class="ppl-role">Client PM</div></div>
+        <div class="ppl-last">6d</div>
+      </div>
+      <div class="ppl-item">
+        <div class="ppl-avatar">A</div>
+        <div class="ppl-info"><div class="ppl-name">Arun Kumar</div><div class="ppl-role">Backend Dev</div></div>
+        <div class="ppl-last">12d</div>
+      </div>
+      <div class="ppl-item">
+        <div class="ppl-avatar">M</div>
+        <div class="ppl-info"><div class="ppl-name">Manager</div><div class="ppl-role">Director of Eng</div></div>
+        <div class="ppl-last">5d</div>
+      </div>
+    </div>
+
+    <!-- Person Detail -->
+    <div class="detail">
+      <div class="profile-header">
+        <div class="profile-avatar">R</div>
+        <div class="profile-info">
+          <h1>Alex Rivera</h1>
+          <div class="role">Engineering Lead</div>
+        </div>
+      </div>
+
+      <div class="health-bar">
+        <div class="health-label">Relationship Health</div>
+        <div class="health-track"><div class="health-fill" style="width:82%;background:var(--accent);"></div></div>
+        <div class="health-score" style="color:var(--accent);">82 / 100</div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat"><div class="stat-value">2 days ago</div><div class="stat-label">Last spoke</div></div>
+        <div class="stat"><div class="stat-value">16</div><div class="stat-label">Interactions</div></div>
+        <div class="stat"><div class="stat-value">8.5 hrs</div><div class="stat-label">Total time</div></div>
+        <div class="stat"><div class="stat-value">2-3x / week</div><div class="stat-label">Frequency</div></div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">Timeline</div>
+        <div class="tab">Promises</div>
+        <div class="tab">Meetings</div>
+        <div class="tab">Tasks</div>
+      </div>
+
+      <div class="section">
+        <div class="timeline-item">
+          <div class="timeline-date">Mar 31</div>
+          <div class="timeline-content">
+            <div class="timeline-title">Sprint Planning <span class="timeline-dur">45 min</span></div>
+            <div class="timeline-detail">Discussed auth approach, dashboard layout. Decided JWT 7-day refresh tokens.</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">Mar 28</div>
+          <div class="timeline-content">
+            <div class="timeline-title">Team Standup <span class="timeline-dur">15 min</span></div>
+            <div class="timeline-detail">"Most of the schema work is done." Mentioned personal time needed this week.</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">Mar 25</div>
+          <div class="timeline-content">
+            <div class="timeline-title">Architecture Review <span class="timeline-dur">60 min</span></div>
+            <div class="timeline-detail">Decided PostgreSQL over MongoDB. Redis caching with 15-min TTL approved.</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">Mar 22</div>
+          <div class="timeline-content">
+            <div class="timeline-title">1:1 <span class="timeline-dur">30 min</span></div>
+            <div class="timeline-detail">Discussed hiring timeline, his career goals. His daughter has exams this week.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><i class="ph-light ph-handshake"></i> Open Promises</div>
+        <div class="promise-item">
+          <div class="promise-dot overdue"></div>
+          <div class="promise-text"><strong>You &rarr; Alex:</strong> Send architecture document</div>
+          <div class="promise-age overdue">5d overdue</div>
+        </div>
+        <div class="promise-item">
+          <div class="promise-dot pending"></div>
+          <div class="promise-text"><strong>Alex &rarr; Team:</strong> Complete session handling update</div>
+          <div class="promise-age pending">Due Apr 4</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><i class="ph-light ph-note-pencil"></i> Personal Notes</div>
+        <div class="note-item">His daughter has exams this week — may need flexibility</div>
+        <div class="note-item">Prefers async communication after 6pm</div>
+        <div class="note-item">Birthday: August 12</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

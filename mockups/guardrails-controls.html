@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SudoBrain Guardrails Controls</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: #1C1C1E;
+      --bg-secondary: #2C2C2E;
+      --bg-tertiary: #3A3A3C;
+      --fg-primary: #FFFFFF;
+      --fg-secondary: rgba(235, 235, 245, 0.6);
+      --separator: rgba(235, 235, 245, 0.08);
+      --accent: #0A84FF;
+      --success: #30D158;
+      --warning: #FF9F0A;
+      --error: #FF453A;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg-primary);
+      color: var(--fg-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+    }
+    .window {
+      width: min(760px, calc(100vw - 40px));
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg-secondary);
+      box-shadow: 0 24px 80px rgba(0,0,0,.36);
+      border: 1px solid var(--separator);
+    }
+    .chrome {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--separator);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .red { background: #FF5F57; } .yellow { background: #FFBD2E; } .green { background: #28C840; }
+    .title { margin-left: 12px; font-size: 13px; color: var(--fg-secondary); }
+    .content { display: grid; grid-template-columns: 220px 1fr; min-height: 420px; }
+    .sidebar { padding: 18px 12px; border-right: 1px solid var(--separator); }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: var(--fg-secondary);
+      font-size: 13px;
+    }
+    .nav.active { color: var(--fg-primary); background: rgba(10,132,255,.18); }
+    .detail { padding: 28px; }
+    h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; }
+    p { margin: 0; color: var(--fg-secondary); font-size: 13px; line-height: 1.45; }
+    .panel {
+      margin-top: 22px;
+      padding: 16px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--separator);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 0;
+      border-top: 1px solid var(--separator);
+    }
+    .row:first-child { border-top: 0; padding-top: 0; }
+    .label { font-size: 14px; font-weight: 600; }
+    .meta { font-size: 12px; color: var(--fg-secondary); margin-top: 3px; }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      color: var(--success);
+      background: rgba(48,209,88,.14);
+    }
+    .badge.warn { color: var(--warning); background: rgba(255,159,10,.16); }
+    .actions { display: flex; gap: 8px; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: var(--fg-primary);
+      background: var(--bg-tertiary);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button.danger { background: rgba(255,69,58,.18); color: var(--error); }
+    button.primary { background: rgba(10,132,255,.2); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="window">
+    <div class="chrome">
+      <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+      <span class="title">SudoBrain Settings</span>
+    </div>
+    <section class="content">
+      <aside class="sidebar">
+        <div class="nav">gear General</div>
+        <div class="nav active">server.rack System</div>
+        <div class="nav">keyboard Shortcuts</div>
+        <div class="nav">lock.shield Privacy</div>
+      </aside>
+      <section class="detail">
+        <h1>Safety Controls</h1>
+        <p>Pause proactive jobs and resolve hard-approval actions without leaving the local Mac app.</p>
+        <div class="panel">
+          <div class="row">
+            <div>
+              <div class="label">Emergency stop</div>
+              <div class="meta">Mutating and proactive actions are allowed.</div>
+            </div>
+            <span class="badge">Inactive</span>
+          </div>
+          <div class="row">
+            <div>
+              <div class="label">Pending approvals</div>
+              <div class="meta">Hard-tier actions wait for explicit approval.</div>
+            </div>
+            <div class="actions"><button class="primary">checkmark</button><button>xmark</button></div>
+          </div>
+          <div class="row">
+            <div>
+              <div class="label">Proactive scheduler</div>
+              <div class="meta">Heartbeat and morning briefing are running.</div>
+            </div>
+            <span class="badge warn">Running</span>
+          </div>
+          <div class="row">
+            <div>
+              <div class="label">Immediate shutdown</div>
+              <div class="meta">Reject queued hard actions and pause scheduled jobs.</div>
+            </div>
+            <button class="danger">stop.circle.fill Emergency Stop</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
