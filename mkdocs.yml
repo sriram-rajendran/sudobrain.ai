@@ -1,0 +1,15 @@
+site_name: SudoBrain
+site_description: Local-first AI memory and intelligence for real work
+repo_url: https://github.com/your-org/sudobrain
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Try In 5 Minutes: try-sudobrain-in-5-minutes.md
+  - Setup: setup.md
+  - Architecture: architecture.md
+  - Data Flow: data-flow.md
+  - Feature Matrix: feature-matrix.md
+  - Roadmap: roadmap.md
+  - Privacy: privacy.md
+  - Release Checklist: release-checklist.md

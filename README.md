@@ -20,6 +20,32 @@ knowledge can be audited before it is used for decisions.
 - Source audit endpoints for validation, dedupe, and graph consistency checks.
 - macOS SwiftUI app and browser-extension surfaces for local workflows.
 
+## Try SudoBrain In 5 Minutes
+
+The fastest public-safe path uses local services plus synthetic demo data:
+
+```bash
+./scripts/bootstrap_local.sh
+./run_backend.sh
+```
+
+In another terminal:
+
+```bash
+make demo
+make smoke
+```
+
+Then open the macOS app or query the backend:
+
+```bash
+curl 'http://127.0.0.1:8420/search?q=Atlas'
+curl 'http://127.0.0.1:8420/knowledge/export?format=markdown'
+```
+
+No private Slack, Gmail, Fathom, Linear, or Calendar credentials are needed for
+the demo workspace.
+
 ## Architecture
 
 - `backend/`: FastAPI service, source sync, extraction, storage, graph, and audit logic.
@@ -27,6 +53,9 @@ knowledge can be audited before it is used for decisions.
 - `browser-extension/`: lightweight capture extension.
 - `mockups/`: design prototypes.
 - `scripts/`: optional local maintenance helpers.
+
+See [docs/architecture.md](docs/architecture.md) and
+[docs/data-flow.md](docs/data-flow.md) for diagrams and system boundaries.
 
 Storage is local by default:
 
@@ -56,6 +85,13 @@ docker compose up -d postgres neo4j
 uvicorn backend.main:app --host 127.0.0.1 --port 8420 --reload
 ```
 
+Or run the helper:
+
+```bash
+./scripts/bootstrap_local.sh
+./run_backend.sh
+```
+
 Then check:
 
 ```bash
@@ -64,8 +100,27 @@ curl http://127.0.0.1:8420/graph/status
 curl http://127.0.0.1:8420/sync/audit
 ```
 
+For a containerized backend plus dependencies:
+
+```bash
+make docker-full-up
+```
+
 The default `.env.example` disables external sync. Enable only the integrations
 you want after reading [docs/privacy.md](docs/privacy.md).
+
+## Demo Data
+
+`make demo` loads a synthetic workspace with meetings, Slack-style messages,
+Gmail-style messages, people, projects, tasks, decisions, and promises. Demo
+rows are prefixed with `demo-` and can be safely reloaded.
+
+## Trust And Portability
+
+- Chat responses include source metadata when local search can identify it.
+- `/knowledge/export?format=json` exports portable structured knowledge.
+- `/knowledge/export?format=markdown` exports a reviewable Markdown vault.
+- `/sync/audit` checks local storage and graph health without external calls.
 
 ## macOS App
 
@@ -115,6 +170,12 @@ This checks for secrets, sensitive tracked files, private sample text,
 read-only integration boundaries, whitespace issues, Python compile health, and
 the macOS Swift build.
 
+For a running local backend:
+
+```bash
+make smoke
+```
+
 ## Privacy Status
 
 SudoBrain can process sensitive communication data. Keep it private until you
@@ -123,8 +184,10 @@ understand the storage model, retention behavior, and sync toggles. See
 
 ## Maturity
 
-This project is early and intended for technically comfortable users. Expect
-active changes around setup, extraction quality, UI, and review workflows.
+This project is early and intended for technically comfortable users. The
+[feature matrix](docs/feature-matrix.md) separates stable surfaces from
+experimental roadmap work, and [docs/roadmap.md](docs/roadmap.md) tracks the
+open-source adoption plan.
 
 ## License
 

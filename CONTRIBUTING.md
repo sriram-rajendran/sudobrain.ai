@@ -16,22 +16,33 @@ Thanks for helping improve SudoBrain.
 ## Local Setup
 
 ```bash
-cp .env.example .env
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r backend/requirements.txt
-docker compose up -d postgres neo4j
-uvicorn backend.main:app --host 127.0.0.1 --port 8420 --reload
+./scripts/bootstrap_local.sh
+./run_backend.sh
+```
+
+Load public-safe demo data in another terminal:
+
+```bash
+make demo
 ```
 
 ## Checks Before a Pull Request
 
 ```bash
 make verify
+make smoke
 ```
 
 If local services are available, also include `/sync/audit` results. If any
 check is skipped, say which check was skipped and why.
+
+## Contributor-Friendly Areas
+
+- Demo data and fixture coverage.
+- Source citation cards and provenance UI.
+- Markdown/JSON export improvements.
+- Connector SDK examples.
+- Docs, screenshots, and release checklist maintenance.
 
 ## Pull Request Notes
 

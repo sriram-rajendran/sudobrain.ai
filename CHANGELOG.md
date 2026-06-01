@@ -1,0 +1,12 @@
+# Changelog
+
+## Unreleased
+
+- Added synthetic demo data loading through `scripts/load_demo_data.py` and `make demo`.
+- Added local startup smoke checks through `scripts/smoke_test_startup.py` and `make smoke`.
+- Added `scripts/bootstrap_local.sh` for one-command local dependency setup.
+- Added `docker-compose.full.yml` for backend, Postgres, and Neo4j.
+- Added JSON and Markdown knowledge export at `/knowledge/export`.
+- Expanded onboarding readiness checks for local storage, Chroma, Calendar, and demo data.
+- Added open-source adoption docs: architecture, data flow, feature matrix, roadmap, release checklist, and five-minute quickstart.
+- Added code of conduct and GitHub issue templates.

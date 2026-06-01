@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -1007,6 +1007,7 @@ def onboarding_status():
         checks.append({"key": key, "label": label, "ok": bool(ok), "detail": detail})
 
     add("backend", "Backend API", True, "FastAPI is responding")
+    add("local_storage", "Local storage", os.access(DATA_DIR, os.W_OK), DATA_DIR)
     try:
         from backend.storage.resilience import check_database_integrity
         integrity = check_database_integrity()
@@ -1019,6 +1020,11 @@ def onboarding_status():
     except Exception as e:
         add("neo4j", "Neo4j", False, str(e))
     try:
+        from backend.storage.chroma_store import is_available as chroma_ok
+        add("chroma", "Chroma", chroma_ok(), "Vector collection ready")
+    except Exception as e:
+        add("chroma", "Chroma", False, str(e))
+    try:
         from backend.ai.model_router import _get_available_models
         models = sorted(_get_available_models())
         add("models", "Local models", bool(models), ", ".join(models[:5]) or "No models detected")
@@ -1030,9 +1036,22 @@ def onboarding_status():
         ("slack", "Slack", "SUDOBRAIN_SYNC_SLACK"),
         ("fathom", "Fathom", "SUDOBRAIN_SYNC_FATHOM"),
         ("linear", "Linear", "LINEAR_API_TOKEN"),
+        ("calendar", "Google Calendar", "GCAL_TOKEN_FILE"),
         ("project_context", "Local repositories", "SUDOBRAIN_SYNC_PROJECT_CONTEXT"),
     ]:
         add(key, label, _truthy_env(env_name, False) or bool(os.getenv(env_name)), f"{env_name} configured")
+
+    demo_rows = 0
+    try:
+        conn = db.get_connection()
+        try:
+            row = conn.execute("SELECT COUNT(*) AS total FROM transcripts WHERE id LIKE 'demo-%'").fetchone()
+            demo_rows = int(row["total"]) if row else 0
+        finally:
+            conn.close()
+    except Exception:
+        demo_rows = 0
+    add("demo_data", "Demo data", demo_rows > 0, f"{demo_rows} demo transcripts")
 
     return {
         "complete": all(c["ok"] for c in checks if c["key"] in {"backend", "postgres"}),
@@ -1364,6 +1383,10 @@ def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> 
                 "source": f"Transcript ({r.get('mode', 'recording')})",
                 "date": r.get("recording_date", ""),
                 "speaker_label": r.get("speaker_label", ""),
+                "source_table": "segments",
+                "source_id": r.get("id"),
+                "transcript_id": r.get("transcript_id"),
+                "recording_id": r.get("recording_id"),
             })
 
     if include_semantic:
@@ -1383,6 +1406,9 @@ def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> 
                     "source": f"Semantic match ({r.get('source_table', 'unknown')}, score: {r.get('score', 0):.2f})",
                     "date": "",
                     "speaker_label": "",
+                    "source_table": (r.get("metadata") or {}).get("source_table", r.get("source_table", "vectors")),
+                    "source_id": (r.get("metadata") or {}).get("source_id", r.get("id")),
+                    "score": r.get("score"),
                 })
 
     action_items = db.get_pending_action_items()
@@ -1396,12 +1422,14 @@ def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> 
             "source": "Task Database",
             "date": "",
             "speaker_label": "System",
+            "source_table": "action_items",
+            "source_id": ",".join(str(a.get("id")) for a in action_items[:10] if a.get("id") is not None),
         })
 
     conn = db.get_connection()
     try:
         decisions = conn.execute(
-            "SELECT text, made_by, context, created_at FROM decisions ORDER BY created_at DESC LIMIT 5"
+            "SELECT id, text, made_by, context, created_at FROM decisions ORDER BY created_at DESC LIMIT 5"
         ).fetchall()
     finally:
         conn.close()
@@ -1413,12 +1441,14 @@ def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> 
             "source": "Decision Database",
             "date": "",
             "speaker_label": "System",
+            "source_table": "decisions",
+            "source_id": ",".join(str(d.get("id")) for d in decisions if d.get("id") is not None),
         })
 
     conn = db.get_connection()
     try:
         promises = conn.execute(
-            "SELECT promised_by_name, promised_to_name, description, due_date, status FROM promises WHERE status = 'pending' LIMIT 5"
+            "SELECT id, promised_by_name, promised_to_name, description, due_date, status FROM promises WHERE status = 'pending' LIMIT 5"
         ).fetchall()
     finally:
         conn.close()
@@ -1433,6 +1463,8 @@ def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> 
             "source": "Promise Database",
             "date": "",
             "speaker_label": "System",
+            "source_table": "promises",
+            "source_id": ",".join(str(p.get("id")) for p in promises if p.get("id") is not None),
         })
 
     return knowledge_context
@@ -1455,6 +1487,11 @@ def _offline_chat_response(query: str, knowledge_context: list[dict]) -> dict:
             "source": source,
             "date": entry.get("date", ""),
             "text": excerpt[:100],
+            "source_table": entry.get("source_table", ""),
+            "source_id": entry.get("source_id", ""),
+            "transcript_id": entry.get("transcript_id", ""),
+            "recording_id": entry.get("recording_id", ""),
+            "score": entry.get("score"),
         })
 
     if not lines:
@@ -3025,6 +3062,84 @@ def source_ingestion_audit():
     """DB/Neo4j-only audit for source ingestion health and dedupe."""
     from backend.source_audit import collect_source_audit
     return collect_source_audit()
+
+
+def _knowledge_export_bundle(limit: int = 5000) -> dict:
+    """Build a portable, non-secret knowledge export with provenance hints."""
+    tables = [
+        "projects", "people", "recordings", "transcripts", "segments",
+        "action_items", "decisions", "promises", "reminders",
+    ]
+    conn = db.get_connection()
+    bundle = {
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "format": "sudobrain-knowledge-export",
+        "tables": {},
+    }
+    try:
+        for table in tables:
+            try:
+                rows = conn.execute(f"SELECT * FROM {table} LIMIT ?", (limit,)).fetchall()
+                bundle["tables"][table] = [dict(r) for r in rows]
+            except Exception as e:
+                bundle["tables"][table] = {"error": str(e)}
+    finally:
+        conn.close()
+    return bundle
+
+
+def _knowledge_export_markdown(bundle: dict) -> str:
+    lines = [
+        "# SudoBrain Knowledge Export",
+        "",
+        f"Exported at: {bundle['exported_at']}",
+        "",
+    ]
+
+    def rows(table: str) -> list[dict]:
+        value = bundle["tables"].get(table, [])
+        return value if isinstance(value, list) else []
+
+    for project in rows("projects"):
+        lines.extend([
+            f"## Project: {project.get('name', 'Untitled')}",
+            "",
+            project.get("description") or "",
+            "",
+            f"Status: {project.get('status', 'unknown')}",
+            "",
+        ])
+
+    for title, table, text_key in [
+        ("Decisions", "decisions", "text"),
+        ("Promises", "promises", "description"),
+        ("Action Items", "action_items", "text"),
+        ("People", "people", "name"),
+    ]:
+        lines.extend([f"## {title}", ""])
+        for row in rows(table):
+            source = row.get("transcript_id") or row.get("email") or row.get("id") or "unknown"
+            detail = row.get(text_key) or ""
+            metadata = []
+            for key in ("project", "made_by", "assignee", "promised_by_name", "promised_to_name", "due_date", "status"):
+                if row.get(key):
+                    metadata.append(f"{key}: {row[key]}")
+            suffix = f" ({'; '.join(metadata)})" if metadata else ""
+            lines.append(f"- {detail}{suffix}")
+            lines.append(f"  - Source: {source}")
+        lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
+@app.get("/knowledge/export")
+def export_knowledge(format: str = Query(default="json", pattern="^(json|markdown)$"), limit: int = Query(default=5000, ge=1, le=20000)):
+    """Export reviewable local knowledge as JSON or Markdown."""
+    bundle = _knowledge_export_bundle(limit=limit)
+    if format == "markdown":
+        return PlainTextResponse(_knowledge_export_markdown(bundle), media_type="text/markdown")
+    return bundle
 
 
 @app.post("/sync/run")

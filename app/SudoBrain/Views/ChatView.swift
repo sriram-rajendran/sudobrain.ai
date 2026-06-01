@@ -110,23 +110,32 @@ struct ChatView: View {
                     }
                 }()
 
-                // Build source string
-                var sourceText: String? = nil
+                var sourceCards: [ChatSource] = []
                 if let sources = json["sources"] as? [[String: Any]], !sources.isEmpty {
-                    let sourceStrs = sources.compactMap { s -> String? in
-                        guard let src = s["source"] as? String, let date = s["date"] as? String else { return nil }
+                    sourceCards = sources.compactMap { s -> ChatSource? in
+                        guard let src = s["source"] as? String else { return nil }
+                        let date = s["date"] as? String ?? ""
                         let shortDate = String(date.prefix(10))
-                        return "\(src), \(shortDate)"
-                    }
-                    if !sourceStrs.isEmpty {
-                        sourceText = sourceStrs.joined(separator: " | ")
+                        let table = s["source_table"] as? String ?? ""
+                        let sourceId = String(describing: s["source_id"] ?? "")
+                        let excerpt = s["text"] as? String ?? ""
+                        return ChatSource(source: src, date: shortDate, table: table, sourceId: sourceId, excerpt: excerpt)
                     }
                 }
 
-                messages.append(ChatMessage(role: .brain, text: answer, confidence: confidence, source: sourceText))
+                messages.append(ChatMessage(role: .brain, text: answer, confidence: confidence, sources: sourceCards))
             }
         }.resume()
     }
+}
+
+struct ChatSource: Identifiable {
+    let id = UUID()
+    let source: String
+    let date: String
+    let table: String
+    let sourceId: String
+    let excerpt: String
 }
 
 struct ChatMessage: Identifiable {
@@ -134,14 +143,14 @@ struct ChatMessage: Identifiable {
     let role: Role
     let text: String
     var confidence: Confidence = .high
-    var source: String? = nil
+    var sources: [ChatSource] = []
 
-    init(id: UUID = UUID(), role: Role, text: String, confidence: Confidence = .high, source: String? = nil) {
+    init(id: UUID = UUID(), role: Role, text: String, confidence: Confidence = .high, sources: [ChatSource] = []) {
         self.id = id
         self.role = role
         self.text = text
         self.confidence = confidence
-        self.source = source
+        self.sources = sources
     }
 
     enum Role { case user, brain }
@@ -168,10 +177,13 @@ struct MessageBubble: View {
                 if message.role == .brain {
                     HStack(spacing: 6) {
                         confidenceBadge
-                        if let source = message.source {
-                            Text(source)
-                                .font(.system(size: 10))
-                                .foregroundColor(.accentColor)
+                    }
+
+                    if !message.sources.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(message.sources.prefix(4)) { source in
+                                CitationCard(source: source)
+                            }
                         }
                     }
                 }
@@ -213,5 +225,52 @@ struct MessageBubble: View {
                 .background(.secondary.opacity(0.15))
                 .cornerRadius(3)
         }
+    }
+}
+
+struct CitationCard: View {
+    let source: ChatSource
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .font(.system(size: 10))
+                    .foregroundColor(.accentColor)
+                Text(source.source)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if !source.date.isEmpty {
+                    Text(source.date)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+            }
+            if !source.excerpt.isEmpty {
+                Text(source.excerpt)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            if !source.table.isEmpty || !source.sourceId.isEmpty {
+                Text([source.table, source.sourceId].filter { !$0.isEmpty }.joined(separator: " #"))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color.secondary.opacity(0.08))
+        .cornerRadius(6)
+    }
+
+    private var iconName: String {
+        if source.table == "segments" { return "text.quote" }
+        if source.table == "action_items" { return "checkmark.circle" }
+        if source.table == "decisions" { return "arrow.triangle.branch" }
+        if source.table == "promises" { return "hand.raised" }
+        return "link"
     }
 }

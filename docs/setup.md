@@ -12,6 +12,12 @@ python3 -m venv .venv
 pip install -r backend/requirements.txt
 ```
 
+Or use the helper:
+
+```bash
+./scripts/bootstrap_local.sh
+```
+
 The example environment disables external sync by default.
 
 `SUDOBRAIN_API_TOKEN` is optional for single-user local development. If you set
@@ -40,7 +46,33 @@ curl http://127.0.0.1:8420/graph/status
 curl http://127.0.0.1:8420/sync/audit
 ```
 
-## 4. No-Integration Mode
+Run a no-credential smoke test:
+
+```bash
+make smoke
+```
+
+## 4. Demo Workspace
+
+Load public-safe synthetic data:
+
+```bash
+make demo
+```
+
+This creates demo meetings, transcripts, people, projects, tasks, decisions,
+promises, Slack-style messages, and Gmail-style messages. It replaces previous
+demo rows by default and does not touch non-demo records.
+
+Useful checks:
+
+```bash
+curl 'http://127.0.0.1:8420/search?q=Atlas'
+curl 'http://127.0.0.1:8420/onboarding/status'
+curl 'http://127.0.0.1:8420/knowledge/export?format=markdown'
+```
+
+## 5. No-Integration Mode
 
 Leave these disabled to run without private credentials:
 
@@ -57,7 +89,7 @@ Local synthesis is optional. Set `SUDOBRAIN_LLM_COMMAND` only when you have a
 local non-interactive reasoning CLI installed; otherwise SudoBrain uses local
 search fallbacks for chat responses.
 
-## 5. Optional Integrations
+## 6. Optional Integrations
 
 Enable only the sources you want:
 
@@ -78,7 +110,7 @@ SUDOBRAIN_PROJECTS_ROOT=/path/to/your/repos
 
 Use read-only scopes whenever the provider supports them.
 
-## 6. Configurable Aliases
+## 7. Configurable Aliases
 
 Project and person normalization is intentionally configurable. Example:
 
@@ -101,7 +133,17 @@ SELF_EMAIL='alex@example.com'
 Keep real aliases in `.env` or another private config channel, not in public
 source files.
 
-## 7. macOS App
+## 8. Full Docker Compose
+
+Run the backend with Postgres and Neo4j in containers:
+
+```bash
+make docker-full-up
+```
+
+The macOS app still runs locally and talks to `http://127.0.0.1:8420`.
+
+## 9. macOS App
 
 ```bash
 cd app
