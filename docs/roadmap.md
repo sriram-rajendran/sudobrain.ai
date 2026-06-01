@@ -62,6 +62,9 @@ decisions, promises, and project risk.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
 - Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
 - Observability status: started via `/observability/status`.
+- Local RBAC enforcement: shipped for owner/editor/viewer roles.
+- API rate limits: shipped via `SUDOBRAIN_RATE_LIMIT_PER_MINUTE`.
+- Encrypted local secrets store: shipped via `/security/secrets`.
 - Fixture-based integration tests: shipped for Slack, Gmail, Fathom, and Linear fixture shapes.
 - Release process and changelog: started, with CI workflow, release notes template, and unsigned package script.
 - Docs hosting workflow: shipped via GitHub Pages workflow.

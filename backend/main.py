@@ -84,6 +84,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class RBACMiddleware(BaseHTTPMiddleware):
+    """Enforce coarse local roles when auth mode is configured beyond owner."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in PUBLIC_PATHS:
+            return await call_next(request)
+        role = os.getenv("SUDOBRAIN_LOCAL_ROLE", "owner").strip().lower() or "owner"
+        if role == "owner":
+            return await call_next(request)
+        method = request.method.upper()
+        if role == "viewer" and method not in {"GET", "HEAD", "OPTIONS"}:
+            return JSONResponse(status_code=403, content={"detail": "Viewer role is read-only"})
+        if role == "editor" and request.url.path.startswith(("/admin", "/security")):
+            return JSONResponse(status_code=403, content={"detail": "Editor role cannot access admin/security endpoints"})
+        return await call_next(request)
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -107,6 +124,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(AuthMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RBACMiddleware)
 
 
 CONFIG_PATH = Path(DATA_DIR if "DATA_DIR" in globals() else os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain"))) / "config.json"
@@ -2167,6 +2185,55 @@ def security_policy_status():
     """Return local RBAC, SSO, quota, and secrets policy status."""
     from backend.security.policy import security_policy
     return security_policy()
+
+
+class LocalSecretRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    value: str = Field(..., min_length=1, max_length=20000)
+
+
+@app.get("/security/secrets/status")
+def local_secrets_status():
+    """Return encrypted local secret-store status without secret values."""
+    from backend.security.secrets import status
+    return status()
+
+
+@app.post("/security/secrets/key")
+def local_secrets_generate_key():
+    """Generate a Fernet key for SUDOBRAIN_SECRETS_KEY without storing it."""
+    from backend.security.secrets import generate_key
+    return {"key": generate_key(), "store_this_in": "SUDOBRAIN_SECRETS_KEY"}
+
+
+@app.get("/security/secrets")
+def local_secrets_list():
+    """List encrypted local secret names without values."""
+    from backend.security.secrets import list_secret_names
+    try:
+        return {"secrets": list_secret_names()}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/security/secrets")
+def local_secrets_put(request: LocalSecretRequest):
+    """Store a secret in the encrypted local store."""
+    from backend.security.secrets import put_secret
+    try:
+        return put_secret(request.name, request.value)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/security/secrets/{name}")
+def local_secrets_delete(name: str):
+    """Delete a secret from the encrypted local store."""
+    from backend.security.secrets import delete_secret
+    try:
+        return delete_secret(name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/plugins")

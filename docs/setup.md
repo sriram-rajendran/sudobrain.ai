@@ -24,6 +24,10 @@ The example environment disables external sync by default.
 it and also want localhost clients to authenticate, set
 `SUDOBRAIN_TRUST_LOCALHOST=false`.
 
+For read-only local browsing, set `SUDOBRAIN_LOCAL_ROLE=viewer`; mutating API
+calls will return `403`. Set `SUDOBRAIN_RATE_LIMIT_PER_MINUTE=0` only for
+trusted local development where request throttling is not needed.
+
 ## 2. Local Services
 
 Start Postgres and Neo4j:
@@ -110,7 +114,25 @@ SUDOBRAIN_PROJECTS_ROOT=/path/to/your/repos
 
 Use read-only scopes whenever the provider supports them.
 
-## 7. Configurable Aliases
+## 7. Optional Encrypted Secrets
+
+SudoBrain can keep opt-in integration/provider secrets in an encrypted local
+file instead of plain environment values.
+
+```bash
+curl -X POST http://127.0.0.1:8420/security/secrets/key
+```
+
+Store the returned key privately as `SUDOBRAIN_SECRETS_KEY`, then use:
+
+```bash
+curl http://127.0.0.1:8420/security/secrets/status
+curl -X POST http://127.0.0.1:8420/security/secrets \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OPENROUTER_API_KEY","value":"replace-me"}'
+```
+
+## 8. Configurable Aliases
 
 Project and person normalization is intentionally configurable. Example:
 
@@ -133,7 +155,7 @@ SELF_EMAIL='alex@example.com'
 Keep real aliases in `.env` or another private config channel, not in public
 source files.
 
-## 8. Full Docker Compose
+## 9. Full Docker Compose
 
 Run the backend with Postgres and Neo4j in containers:
 
@@ -143,7 +165,7 @@ make docker-full-up
 
 The macOS app still runs locally and talks to `http://127.0.0.1:8420`.
 
-## 9. macOS App
+## 10. macOS App
 
 ```bash
 cd app

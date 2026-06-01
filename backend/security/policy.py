@@ -20,10 +20,17 @@ class Quota:
     window_seconds: int
 
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)) or str(default))
+    except ValueError:
+        return default
+
+
 DEFAULT_QUOTAS = [
-    Quota("api_requests", int(os.getenv("SUDOBRAIN_QUOTA_API_REQUESTS", "600")), 60),
-    Quota("provider_tests", int(os.getenv("SUDOBRAIN_QUOTA_PROVIDER_TESTS", "30")), 3600),
-    Quota("sync_runs", int(os.getenv("SUDOBRAIN_QUOTA_SYNC_RUNS", "12")), 3600),
+    Quota("api_requests", _int_env("SUDOBRAIN_QUOTA_API_REQUESTS", 600), 60),
+    Quota("provider_tests", _int_env("SUDOBRAIN_QUOTA_PROVIDER_TESTS", 30), 3600),
+    Quota("sync_runs", _int_env("SUDOBRAIN_QUOTA_SYNC_RUNS", 12), 3600),
 ]
 
 
@@ -34,6 +41,7 @@ def security_policy() -> dict:
         "mode": mode,
         "local_role": active_role,
         "roles": ROLES,
+        "rbac_enforced": True,
         "multi_user_ready": mode != "local_single_user",
         "sso": {
             "enabled": bool(os.getenv("SUDOBRAIN_SSO_ISSUER")),
@@ -44,5 +52,6 @@ def security_policy() -> dict:
         "secrets": {
             "backend": os.getenv("SUDOBRAIN_SECRET_BACKEND", "environment"),
             "encrypted_local_store": bool(os.getenv("SUDOBRAIN_SECRETS_KEY")),
+            "status_endpoint": "/security/secrets/status",
         },
     }
