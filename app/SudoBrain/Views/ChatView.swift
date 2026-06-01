@@ -2,12 +2,60 @@ import SwiftUI
 
 struct ChatView: View {
     @State private var inputText = ""
+    @State private var sessions: [[String: Any]] = []
+    @State private var sessionId: String? = nil
+    @State private var collection = "general"
+    @State private var provider = ""
     @State private var messages: [ChatMessage] = [
         ChatMessage(role: .brain, text: "Hello. I'm your knowledge assistant. Ask me anything about your meetings, tasks, people, or decisions.", confidence: .high),
     ]
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("Session", selection: Binding(
+                    get: { sessionId ?? "" },
+                    set: { newValue in
+                        sessionId = newValue.isEmpty ? nil : newValue
+                        Task { await loadSession(newValue) }
+                    }
+                )) {
+                    Text("Unsaved").tag("")
+                    ForEach(sessions.indices, id: \.self) { i in
+                        Text(sessions[i]["title"] as? String ?? "Chat").tag(sessions[i]["id"] as? String ?? "")
+                    }
+                }
+                .frame(maxWidth: 240)
+
+                TextField("Collection", text: $collection)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
+
+                Picker("Provider", selection: $provider) {
+                    Text("Default").tag("")
+                    Text("OpenAI-compatible").tag("openai_compatible")
+                    Text("Anthropic").tag("anthropic")
+                    Text("Gemini").tag("gemini")
+                    Text("OpenRouter").tag("openrouter")
+                    Text("Groq").tag("groq")
+                    Text("Bedrock").tag("bedrock")
+                    Text("LM Studio").tag("lm_studio")
+                }
+                .frame(maxWidth: 220)
+
+                Button { Task { await createSession() } } label: {
+                    Image(systemName: "plus.bubble")
+                }
+                .help("Save as new chat")
+                Button { Task { await loadSessions() } } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            Divider()
+
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {
@@ -59,6 +107,7 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
+        .task { await loadSessions() }
     }
 
     @State private var useReACT = true
@@ -83,7 +132,13 @@ struct ChatView: View {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 180
 
-        let body: [String: Any] = ["query": text, "offline": !useReACT]
+        var body: [String: Any] = ["query": text, "offline": !useReACT]
+        if let sessionId { body["session_id"] = sessionId }
+        if !collection.isEmpty { body["collection"] = collection }
+        if !provider.isEmpty {
+            body["provider"] = provider
+            body["offline"] = false
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { data, response, error in
@@ -130,6 +185,31 @@ struct ChatView: View {
         }.resume()
     }
 
+    private func createSession() async {
+        let title = inputText.isEmpty ? "SudoBrain chat" : String(inputText.prefix(48))
+        let response = (try? await APIClient.shared.post("/chat/sessions", body: [
+            "title": title,
+            "collection": collection.isEmpty ? "general" : collection,
+        ])) ?? [:]
+        sessionId = response["id"] as? String
+        await loadSessions()
+    }
+
+    private func loadSessions() async {
+        sessions = (try? await APIClient.shared.getRaw("/chat/sessions")) ?? []
+    }
+
+    private func loadSession(_ id: String) async {
+        guard !id.isEmpty else { return }
+        let response = (try? await APIClient.shared.getRawObject("/chat/sessions/\(id)")) ?? [:]
+        let rawMessages = response["messages"] as? [[String: Any]] ?? []
+        messages = rawMessages.compactMap { item in
+            guard let role = item["role"] as? String, let text = item["text"] as? String else { return nil }
+            let confidence = ChatMessage.Confidence.from(item["confidence"] as? String ?? "medium")
+            return ChatMessage(role: role == "user" ? .user : .brain, text: text, confidence: confidence)
+        }
+    }
+
     private func sendFeedback(for message: ChatMessage, rating: String) async {
         guard message.role == .brain else { return }
         let sourcePayload = message.sources.map { source in
@@ -174,7 +254,17 @@ struct ChatMessage: Identifiable {
     }
 
     enum Role { case user, brain }
-    enum Confidence { case high, medium, low }
+    enum Confidence {
+        case high, medium, low
+
+        static func from(_ raw: String) -> Confidence {
+            switch raw {
+            case "high": return .high
+            case "low": return .low
+            default: return .medium
+            }
+        }
+    }
 }
 
 struct MessageBubble: View {

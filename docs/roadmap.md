@@ -16,7 +16,7 @@ decisions, promises, and project risk.
 
 ## P1: Make SudoBrain Trustworthy
 
-- Source citation metadata for chat search results: started.
+- Source citation metadata for chat search results: shipped for local search and chat cards.
 - JSON and Markdown knowledge export: shipped via `/knowledge/export`.
 - Source audit endpoint: existing.
 - Provenance APIs for decisions, promises, people, and graph edges: started.
@@ -52,14 +52,20 @@ decisions, promises, and project risk.
 
 - Web/PWA companion: started in `web-companion/`.
 - Provider settings UI: started through `/models/status` safe configuration reporting.
-- OpenAI-compatible, OpenRouter, and LM Studio execution scaffolds: started.
-- Anthropic, Gemini, Groq, and Bedrock execution clients: planned.
+- OpenAI-compatible, OpenRouter, LM Studio, Anthropic, Gemini, Groq, and Bedrock execution scaffolds: shipped.
 - Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
 - Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
 - Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
 - Observability status: started via `/observability/status`.
 - Fixture-based integration tests: shipped for Slack, Gmail, Fathom, and Linear fixture shapes.
 - Release process and changelog: started, with CI workflow, release notes template, and unsigned package script.
+
+## Cross-Platform And Chat UX
+
+- Mobile/non-Mac capture: shipped via `/capture/mobile`.
+- Chat-channel capture adapter: shipped via `/capture/channel/{channel_name}`.
+- Saved chat sessions and collections: shipped via `/chat/sessions`.
+- Prompt/provider switcher: shipped in the macOS Chat view.
 
 ## Product Principles
 

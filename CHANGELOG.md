@@ -22,3 +22,4 @@
 - Added review queue filters, report export/share artifacts, plugin registry discovery, and MCP client status.
 - Added OpenAI-compatible provider execution scaffold and a local web/PWA companion.
 - Added Slack, Gmail, Fathom, and Linear fixture-shape tests plus unsigned package script.
+- Added saved chat sessions, chat collections, provider switching, mobile capture, and chat-channel capture adapters.

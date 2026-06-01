@@ -300,6 +300,7 @@ class CaptureRequest(BaseModel):
     source_title: Optional[str] = Field(None, max_length=500)
     project: Optional[str] = Field(None, max_length=200)
     person: Optional[str] = Field(None, max_length=200)
+    channel: Optional[str] = Field(None, max_length=100)
 
 @app.post("/capture")
 def quick_capture(request: CaptureRequest):
@@ -401,6 +402,25 @@ def quick_capture(request: CaptureRequest):
         init_life_tables()
         _db_write("INSERT INTO ideas (text, category, status) VALUES (?, 'uncategorized', 'parked')", (text,))
         return {"type": "idea", "text": text, "note": "Auto-classified as idea."}
+
+
+@app.post("/capture/mobile")
+def mobile_capture(request: CaptureRequest):
+    """Mobile/non-Mac quick capture wrapper."""
+    result = quick_capture(request)
+    result["capture_surface"] = "mobile"
+    return result
+
+
+@app.post("/capture/channel/{channel_name}")
+def channel_capture(channel_name: str, request: CaptureRequest):
+    """Telegram/Discord-style chat-channel capture adapter."""
+    payload = request.dict()
+    payload["channel"] = channel_name
+    result = quick_capture(CaptureRequest(**payload))
+    result["capture_surface"] = "channel"
+    result["channel"] = channel_name
+    return result
 
 
 # ── Inbox / Dashboard ──
@@ -1411,11 +1431,109 @@ def snooze_action_item(task_id: int, days: int = Query(default=1, ge=1, le=365))
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     offline: bool = False
+    session_id: Optional[str] = None
+    collection: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
     sources: list
     confidence: str
+
+
+class ChatSessionRequest(BaseModel):
+    title: str = "New chat"
+    collection: str = "general"
+
+
+def _init_chat_tables(conn) -> None:
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            collection TEXT DEFAULT 'general',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT,
+            role TEXT,
+            text TEXT,
+            source_json TEXT,
+            confidence TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
+def _save_chat_message(session_id: str | None, role: str, text: str, sources: list | None = None, confidence: str = "") -> str | None:
+    if not session_id:
+        return None
+    conn = db.get_connection()
+    try:
+        _init_chat_tables(conn)
+        row = conn.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not row:
+            conn.execute("INSERT INTO chat_sessions (id, title, collection) VALUES (?, ?, ?)", (session_id, "Chat", "general"))
+        conn.execute(
+            "INSERT INTO chat_messages (session_id, role, text, source_json, confidence) VALUES (?, ?, ?, ?, ?)",
+            (session_id, role, text, json.dumps(sources or []), confidence),
+        )
+        conn.execute("UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (session_id,))
+        conn.commit()
+        return session_id
+    finally:
+        conn.close()
+
+
+@app.post("/chat/sessions")
+def create_chat_session(request: ChatSessionRequest):
+    session_id = str(uuid.uuid4())
+    conn = db.get_connection()
+    try:
+        _init_chat_tables(conn)
+        conn.execute(
+            "INSERT INTO chat_sessions (id, title, collection) VALUES (?, ?, ?)",
+            (session_id, request.title, request.collection),
+        )
+        conn.commit()
+        return {"id": session_id, "title": request.title, "collection": request.collection}
+    finally:
+        conn.close()
+
+
+@app.get("/chat/sessions")
+def list_chat_sessions(collection: Optional[str] = None, limit: int = 100):
+    conn = db.get_connection()
+    try:
+        _init_chat_tables(conn)
+        if collection:
+            rows = conn.execute(
+                "SELECT * FROM chat_sessions WHERE collection = ? ORDER BY updated_at DESC LIMIT ?",
+                (collection, min(limit, 500)),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT ?", (min(limit, 500),)).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/chat/sessions/{session_id}")
+def get_chat_session(session_id: str):
+    conn = db.get_connection()
+    try:
+        _init_chat_tables(conn)
+        session = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        messages = conn.execute("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC", (session_id,)).fetchall()
+        return {"session": dict(session), "messages": [dict(row) for row in messages]}
+    finally:
+        conn.close()
 
 
 def _build_chat_knowledge_context(query: str, include_semantic: bool = True) -> list[dict]:
@@ -1583,13 +1701,32 @@ def chat(request: ChatRequest):
         logger.debug("Auto-embed skipped: %s", e)
 
     knowledge_context = _build_chat_knowledge_context(request.query, include_semantic=True)
+    _save_chat_message(request.session_id, "user", request.query)
 
     if request.offline:
         result = _offline_chat_response(request.query, knowledge_context)
+        _save_chat_message(request.session_id, "assistant", result["answer"], result["sources"], result["confidence"])
         return ChatResponse(answer=result["answer"], sources=result["sources"], confidence=result["confidence"])
 
-    # Ask local reasoning engine with full context
-    result = ask_with_knowledge(request.query, knowledge_context)
+    if request.provider:
+        from backend.ai.providers import complete_with_provider
+        context = "\n\n".join(f"[{i+1}] {entry.get('source')}: {entry.get('text')}" for i, entry in enumerate(knowledge_context[:8]))
+        provider_result = complete_with_provider(
+            prompt=f"Answer using this local SudoBrain context. Cite source numbers when possible.\n\n{context}\n\nQuestion: {request.query}",
+            provider=request.provider,
+            max_tokens=512,
+        )
+        if provider_result.get("status") == "ok" and provider_result.get("text"):
+            result = {
+                "answer": provider_result["text"],
+                "sources": _offline_chat_response(request.query, knowledge_context)["sources"],
+                "confidence": "medium",
+            }
+        else:
+            result = {"answer": f"Provider unavailable: {provider_result.get('error')}", "sources": [], "confidence": "low"}
+    else:
+        # Ask local reasoning engine with full context
+        result = ask_with_knowledge(request.query, knowledge_context)
 
     if _llm_answer_unavailable(result.get("answer", "")):
         logger.info("local reasoning engine unavailable for chat; falling back to offline search response")
@@ -1604,6 +1741,7 @@ def chat(request: ChatRequest):
     except Exception as e:
         logger.debug("Self-improvement check skipped: %s", e)
 
+    _save_chat_message(request.session_id, "assistant", result["answer"], result["sources"], result["confidence"])
     return ChatResponse(
         answer=result["answer"],
         sources=result["sources"],
