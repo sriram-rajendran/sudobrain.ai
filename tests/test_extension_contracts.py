@@ -4,6 +4,7 @@ from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
 from backend.connectors.asana import AsanaConnector
 from backend.connectors.catalog import connector_keys, list_source_connectors
+from backend.connectors.clickup import ClickUpConnector
 from backend.connectors.confluence import ConfluenceConnector
 from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
@@ -77,6 +78,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("jira", extensions["runtime"]["connectors"])
         self.assertIn("asana", extensions["runtime"]["connectors"])
         self.assertIn("trello", extensions["runtime"]["connectors"])
+        self.assertIn("clickup", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -464,6 +466,49 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Review launch board")
         self.assertIn("Need owner assignment", docs[0].text)
         self.assertEqual(docs[0].metadata["labels"], ["blocker"])
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_clickup_connector_normalizes_tasks(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/user"):
+                    return FakeResponse({"user": {"username": "maya"}})
+                if url.endswith("/list/list-1/task"):
+                    return FakeResponse({"tasks": [
+                        {
+                            "id": "task-1",
+                            "name": "Resolve release blocker",
+                            "description": "Fix failed smoke test.",
+                            "status": {"status": "in progress"},
+                            "priority": {"priority": "high"},
+                            "assignees": [{"username": "Maya"}],
+                            "tags": [{"name": "blocker"}],
+                            "date_updated": "2026-01-04T00:00:00Z",
+                            "due_date": "2026-01-08",
+                            "url": "https://example.invalid/clickup/task-1",
+                            "list": {"id": "list-1"},
+                            "folder": {"id": "folder-1"},
+                            "space": {"id": "space-1"},
+                        }
+                    ]})
+                return FakeResponse({})
+
+        connector = ClickUpConnector(token="secret", list_id="list-1", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Resolve release blocker")
+        self.assertIn("Fix failed smoke test", docs[0].text)
+        self.assertEqual(docs[0].metadata["tags"], ["blocker"])
         self.assertNotIn("secret", str(connector.health()))
 
 

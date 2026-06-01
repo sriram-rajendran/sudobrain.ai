@@ -110,6 +110,18 @@ Use `SUDOBRAIN_TRELLO_API_KEY` and `SUDOBRAIN_TRELLO_TOKEN` with optional
 `SUDOBRAIN_TRELLO_BOARD_ID` to scope boards, lists, cards, labels, members, and
 comments.
 
+Preview ClickUp without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/clickup/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"list_id":"list-id","limit":10}'
+```
+
+Use `SUDOBRAIN_CLICKUP_TOKEN` with optional `SUDOBRAIN_CLICKUP_TEAM_ID` or
+`SUDOBRAIN_CLICKUP_LIST_ID` to scope tasks, lists, spaces, assignees, tags, due
+dates, and priority.
+
 ## Source Families
 
 ### Engineering

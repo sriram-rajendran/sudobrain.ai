@@ -74,6 +74,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/jira/preview")',
         '@app.post("/extensions/connectors/asana/preview")',
         '@app.post("/extensions/connectors/trello/preview")',
+        '@app.post("/extensions/connectors/clickup/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -203,6 +204,13 @@ def main() -> None:
         "SUDOBRAIN_TRELLO_API_KEY",
         "/boards/",
         "commentCard",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/clickup.py", [
+        "class ClickUpConnector",
+        "SUDOBRAIN_CLICKUP_TOKEN",
+        "/task",
+        "assignees",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

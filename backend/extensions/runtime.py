@@ -5,6 +5,7 @@ from __future__ import annotations
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.connectors.asana import AsanaConnector, preview_documents as preview_asana_documents
 from backend.connectors.catalog import list_source_connectors
+from backend.connectors.clickup import ClickUpConnector, preview_documents as preview_clickup_documents
 from backend.connectors.confluence import ConfluenceConnector, preview_documents as preview_confluence_documents
 from backend.connectors.google_drive import GoogleDriveConnector, preview_documents as preview_drive_documents
 from backend.connectors.github import GitHubConnector, preview_documents
@@ -23,7 +24,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello", "clickup"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -146,6 +147,20 @@ def trello_preview(
     documents = []
     if health.get("ok"):
         documents = preview_trello_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def clickup_preview(
+    token: str | None = None,
+    team_id: str | None = None,
+    list_id: str | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = ClickUpConnector(token=token, team_id=team_id, list_id=list_id)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_clickup_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 
