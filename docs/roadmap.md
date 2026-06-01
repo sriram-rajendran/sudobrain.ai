@@ -67,7 +67,7 @@ decisions, promises, and project risk.
 - API rate limits: shipped via `SUDOBRAIN_RATE_LIMIT_PER_MINUTE`.
 - Encrypted local secrets store: shipped via `/security/secrets`.
 - Fixture-based integration tests: shipped for Slack, Gmail, Fathom, and Linear fixture shapes.
-- Release process and changelog: started, with CI workflow, release notes template, and unsigned package script.
+- Release process and changelog: shipped with CI workflow, release notes template, unsigned package script, release manifest, and non-destructive readiness audit.
 - Docs hosting workflow: shipped via GitHub Pages workflow.
 - Release artifacts workflow: shipped as draft release workflow with unsigned artifacts and optional signing-secret hook.
 - README screenshots: synthetic public-safe screenshots shipped; captured GIFs still require running the app.

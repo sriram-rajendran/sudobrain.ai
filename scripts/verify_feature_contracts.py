@@ -102,6 +102,10 @@ def main() -> None:
         "Person tag",
         "Recent captures",
     ])
+    require_text("Makefile", [
+        "release-readiness",
+        "scripts/release_readiness.py",
+    ])
     print("Feature contract checks passed.")
 
 
