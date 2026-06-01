@@ -30,6 +30,7 @@ REQUIRED_FILES = [
 ]
 
 SCREENSHOTS = [
+    "docs/assets/screenshots/demo-flow.gif",
     "docs/assets/screenshots/today.svg",
     "docs/assets/screenshots/chat.svg",
     "docs/assets/screenshots/graph.svg",

@@ -70,7 +70,7 @@ decisions, promises, and project risk.
 - Release process and changelog: shipped with CI workflow, release notes template, unsigned package script, release manifest, and non-destructive readiness audit.
 - Docs hosting workflow: shipped via GitHub Pages workflow.
 - Release artifacts workflow: shipped as draft release workflow with unsigned artifacts and optional signing-secret hook.
-- README screenshots: synthetic public-safe screenshots shipped; captured GIFs still require running the app.
+- README screenshots and demo GIF: synthetic public-safe SVG screenshots plus generated `demo-flow.gif` shipped; real captured GIF replacement remains a launch polish task.
 
 ## Cross-Platform And Chat UX
 

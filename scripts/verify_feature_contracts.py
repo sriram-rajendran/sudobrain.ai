@@ -105,6 +105,8 @@ def main() -> None:
     require_text("Makefile", [
         "release-readiness",
         "scripts/release_readiness.py",
+        "demo-gif",
+        "scripts/generate_demo_gif.sh",
     ])
     print("Feature contract checks passed.")
 

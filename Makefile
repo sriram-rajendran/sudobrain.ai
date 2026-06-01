@@ -1,4 +1,4 @@
-.PHONY: verify verify-fast swift-build python-compile test package release-readiness scan-secrets demo smoke mcp-server docker-up docker-full-up clean
+.PHONY: verify verify-fast swift-build python-compile test package release-readiness demo-gif scan-secrets demo smoke mcp-server docker-up docker-full-up clean
 
 verify:
 	python3 scripts/verify_public_repo.py
@@ -36,6 +36,9 @@ package:
 
 release-readiness:
 	python3 scripts/release_readiness.py
+
+demo-gif:
+	./scripts/generate_demo_gif.sh
 
 scan-secrets:
 	gitleaks detect --source . --redact --verbose

@@ -26,3 +26,4 @@
 - Added workflow graph builder scaffold and per-source privacy controls.
 - Added docs/release workflows, release manifest, backend packaging spec, and public-safe README screenshots.
 - Added non-destructive release readiness audit for repo artifacts and external launch blockers.
+- Added a generated public-safe demo GIF and `make demo-gif`.

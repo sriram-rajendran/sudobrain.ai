@@ -120,6 +120,7 @@ rows are prefixed with `demo-` and can be safely reloaded.
 
 Synthetic public-safe screenshots:
 
+- ![Demo flow](docs/assets/screenshots/demo-flow.gif)
 - ![Today](docs/assets/screenshots/today.svg)
 - ![Chat with citations](docs/assets/screenshots/chat.svg)
 - ![Knowledge graph](docs/assets/screenshots/graph.svg)
