@@ -147,6 +147,21 @@ Use `SUDOBRAIN_TEAMS_TOKEN` with optional `SUDOBRAIN_TEAMS_TEAM_ID`,
 messages, chat messages, meeting metadata, attendees, links, and file
 attachments through Microsoft Graph.
 
+Preview Zoom without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/zoom/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"me","from_date":"2026-01-01","to_date":"2026-01-31","limit":10}'
+```
+
+Use `SUDOBRAIN_ZOOM_TOKEN` with optional `SUDOBRAIN_ZOOM_USER_ID`,
+`SUDOBRAIN_ZOOM_FROM`, and `SUDOBRAIN_ZOOM_TO` to scope cloud recording
+previews. The connector normalizes meeting topics, hosts, share links,
+recording files, transcript files, summary/action-item files, and participant
+audio metadata. Set `include_file_text` or `SUDOBRAIN_ZOOM_INCLUDE_FILE_TEXT`
+only when a preview should download small transcript/summary text files.
+
 ## Source Families
 
 ### Engineering

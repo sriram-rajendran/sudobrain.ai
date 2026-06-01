@@ -15,6 +15,7 @@ from backend.connectors.microsoft_teams import MicrosoftTeamsConnector, preview_
 from backend.connectors.monday import MondayConnector, preview_documents as preview_monday_documents
 from backend.connectors.notion import NotionConnector, preview_documents as preview_notion_documents
 from backend.connectors.trello import TrelloConnector, preview_documents as preview_trello_documents
+from backend.connectors.zoom import ZoomConnector, preview_documents as preview_zoom_documents
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.plugins.registry import BUILTIN_PLUGINS, discover_plugins
 from backend.sdk import SourceDocument
@@ -26,7 +27,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello", "clickup", "monday", "microsoft_teams"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana", "trello", "clickup", "monday", "microsoft_teams", "zoom"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -191,6 +192,28 @@ def microsoft_teams_preview(
     documents = []
     if health.get("ok"):
         documents = preview_teams_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def zoom_preview(
+    token: str | None = None,
+    user_id: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    include_file_text: bool | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = ZoomConnector(
+        token=token,
+        user_id=user_id,
+        from_date=from_date,
+        to_date=to_date,
+        include_file_text=include_file_text,
+    )
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_zoom_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

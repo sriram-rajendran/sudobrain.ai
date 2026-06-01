@@ -14,6 +14,7 @@ from backend.connectors.microsoft_teams import MicrosoftTeamsConnector
 from backend.connectors.monday import MondayConnector
 from backend.connectors.notion import NotionConnector
 from backend.connectors.trello import TrelloConnector
+from backend.connectors.zoom import ZoomConnector
 from backend.extensions.runtime import keyword_risk_preview, list_extensions, workflow_action_preview
 from backend.intelligence.sample_module import KeywordRiskModule
 from backend.sdk import SourceDocument
@@ -83,6 +84,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("clickup", extensions["runtime"]["connectors"])
         self.assertIn("monday", extensions["runtime"]["connectors"])
         self.assertIn("microsoft_teams", extensions["runtime"]["connectors"])
+        self.assertIn("zoom", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -614,6 +616,72 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("channel_message", kinds)
         self.assertIn("meeting", kinds)
         self.assertIn("Launch standup", docs[0].text)
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_zoom_connector_normalizes_recordings(self):
+        class FakeResponse:
+            def __init__(self, payload=None, text=""):
+                self.payload = payload or {}
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/recordings"):
+                    return FakeResponse({"total_records": 1, "meetings": [
+                        {
+                            "id": 123,
+                            "uuid": "meeting-uuid",
+                            "topic": "Launch demo",
+                            "agenda": "Review next steps.",
+                            "host_email": "maya@example.invalid",
+                            "start_time": "2026-01-03T00:00:00Z",
+                            "duration": 42,
+                            "share_url": "https://example.invalid/zoom/share",
+                            "recording_count": 3,
+                            "recording_files": [
+                                {
+                                    "id": "file-1",
+                                    "recording_type": "audio_transcript",
+                                    "file_type": "VTT",
+                                    "status": "completed",
+                                    "download_url": "https://example.invalid/transcript.vtt",
+                                },
+                                {
+                                    "id": "file-2",
+                                    "recording_type": "summary_next_steps",
+                                    "file_type": "TXT",
+                                    "status": "completed",
+                                    "download_url": "https://example.invalid/summary.txt",
+                                },
+                                {
+                                    "id": "file-3",
+                                    "recording_type": "shared_screen",
+                                    "file_type": "MP4",
+                                    "status": "completed",
+                                },
+                            ],
+                            "participant_audio_files": [{"participant_user_name": "Alex"}],
+                        }
+                    ]})
+                if url.endswith(".vtt"):
+                    return FakeResponse(text="WEBVTT\n\n1\n00:00:01 --> 00:00:02\nShip the launch checklist.")
+                if url.endswith(".txt"):
+                    return FakeResponse(text="Alex will review action items.")
+                return FakeResponse({})
+
+        connector = ZoomConnector(token="secret", include_file_text=True, session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Launch demo")
+        self.assertIn("Transcript files", docs[0].text)
+        self.assertIn("Ship the launch checklist", docs[0].text)
+        self.assertEqual(docs[0].metadata["transcript_files"][0]["recording_type"], "audio_transcript")
         self.assertNotIn("secret", str(connector.health()))
 
 

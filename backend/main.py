@@ -2407,6 +2407,15 @@ class MicrosoftTeamsPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class ZoomPreviewRequest(BaseModel):
+    token: Optional[str] = Field(None, max_length=2000)
+    user_id: Optional[str] = Field(None, max_length=300)
+    from_date: Optional[str] = Field(None, max_length=20)
+    to_date: Optional[str] = Field(None, max_length=20)
+    include_file_text: Optional[bool] = None
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2603,6 +2612,20 @@ def extension_microsoft_teams_preview(request: MicrosoftTeamsPreviewRequest):
         team_id=request.team_id,
         channel_id=request.channel_id,
         chat_id=request.chat_id,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/zoom/preview")
+def extension_zoom_preview(request: ZoomPreviewRequest):
+    """Preview the read-only Zoom recordings connector without ingesting data."""
+    from backend.extensions.runtime import zoom_preview
+    return zoom_preview(
+        token=request.token,
+        user_id=request.user_id,
+        from_date=request.from_date,
+        to_date=request.to_date,
+        include_file_text=request.include_file_text,
         limit=request.limit,
     )
 

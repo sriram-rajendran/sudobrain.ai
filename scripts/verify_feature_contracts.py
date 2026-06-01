@@ -77,6 +77,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/clickup/preview")',
         '@app.post("/extensions/connectors/monday/preview")',
         '@app.post("/extensions/connectors/microsoft-teams/preview")',
+        '@app.post("/extensions/connectors/zoom/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -227,6 +228,14 @@ def main() -> None:
         "SUDOBRAIN_TEAMS_TOKEN",
         "/messages",
         "/me/events",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/zoom.py", [
+        "class ZoomConnector",
+        "SUDOBRAIN_ZOOM_TOKEN",
+        "recording_files",
+        "audio_transcript",
+        "summary_next_steps",
         "preview_documents",
     ])
     print("Feature contract checks passed.")
