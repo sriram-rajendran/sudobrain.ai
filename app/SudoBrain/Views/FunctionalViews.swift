@@ -781,6 +781,10 @@ struct ReportsView: View {
 
 struct ModelsView: View {
     @State private var status: [String: Any] = [:]
+    @State private var providerHealth: [String: Any] = [:]
+    @State private var routingRules: [String: Any] = [:]
+    @State private var routePreview: [String: Any] = [:]
+    @State private var providerTest: [String: Any] = [:]
     @State private var providerRows: [[String: Any]] = []
 
     var body: some View {
@@ -798,6 +802,19 @@ struct ModelsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     KeyValueCard(title: "Runtime Models", values: status)
+                    KeyValueCard(title: "Provider Health", values: providerHealth)
+                    KeyValueCard(title: "Routing Rules", values: routingRules)
+                    KeyValueCard(title: "Chat Route Preview", values: routePreview)
+                    HStack {
+                        Button {
+                            Task { await testActiveProvider() }
+                        } label: {
+                            Label("Test Active Provider", systemImage: "bolt.heart")
+                        }
+                        if !providerTest.isEmpty {
+                            KeyValueCard(title: "Provider Test", values: providerTest)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Provider Configuration")
                             .font(.system(size: 13, weight: .semibold))
@@ -814,6 +831,9 @@ struct ModelsView: View {
 
     private func load() async {
         status = (try? await APIClient.shared.getRawObject("/models/status")) ?? [:]
+        providerHealth = (try? await APIClient.shared.getRawObject("/models/providers/health")) ?? [:]
+        routingRules = (try? await APIClient.shared.getRawObject("/models/routing-rules")) ?? [:]
+        routePreview = (try? await APIClient.shared.getRawObject("/models/route?task=chat&privacy=local")) ?? [:]
         let config = status["provider_config"] as? [String: Any] ?? [:]
         let providers = config["providers"] as? [String: [String: Any]] ?? [:]
         providerRows = providers.keys.sorted().map { key in
@@ -821,6 +841,13 @@ struct ModelsView: View {
             row["provider"] = key
             return row
         }
+    }
+
+    private func testActiveProvider() async {
+        providerTest = (try? await APIClient.shared.post("/models/providers/test", body: [
+            "prompt": "Reply with one short sentence confirming the provider is reachable.",
+            "max_tokens": 32,
+        ], timeout: 90)) ?? [:]
     }
 }
 

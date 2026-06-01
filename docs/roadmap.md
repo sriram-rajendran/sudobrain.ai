@@ -55,7 +55,7 @@ decisions, promises, and project risk.
 ## P4: Make SudoBrain Community-Ready
 
 - Web/PWA companion: shipped for local search, streaming chat, quick capture, reports, and vault export in `web-companion/`.
-- Provider settings UI: started through `/models/status` safe configuration reporting.
+- Provider settings UI: shipped in the macOS Models view with provider config, health, routing rules, route preview, and active-provider test.
 - Per-task provider routing rules: shipped via `/models/routing-rules` and `/models/route`.
 - OpenAI-compatible, OpenRouter, LM Studio, Anthropic, Gemini, Groq, and Bedrock execution scaffolds: shipped.
 - Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
