@@ -987,6 +987,7 @@ struct LocalSettingsView: View {
 struct AdminDebugView: View {
     @State private var dashboard: [String: Any] = [:]
     @State private var observability: [String: Any] = [:]
+    @State private var metrics: [String: Any] = [:]
     @State private var usage: [String: Any] = [:]
     @State private var scheduler: [String: Any] = [:]
     @State private var heartbeatResult: [String: Any] = [:]
@@ -1005,6 +1006,7 @@ struct AdminDebugView: View {
                 }
                 Section("Observability") {
                     KeyValueCard(title: "Capabilities", values: observability)
+                    KeyValueCard(title: "Request Metrics", values: metrics)
                     KeyValueCard(title: "Usage", values: usage)
                 }
                 Section("Scheduled Agents") {
@@ -1048,6 +1050,7 @@ struct AdminDebugView: View {
     private func load() async {
         dashboard = (try? await APIClient.shared.getRawObject("/admin/dashboard")) ?? [:]
         observability = (try? await APIClient.shared.getRawObject("/observability/status")) ?? [:]
+        metrics = (try? await APIClient.shared.getRawObject("/observability/metrics?limit=25")) ?? [:]
         usage = (try? await APIClient.shared.getRawObject("/usage/analytics")) ?? [:]
         scheduler = (try? await APIClient.shared.getRawObject("/scheduler/status")) ?? [:]
         audit = (try? await APIClient.shared.getRaw("/admin/audit-log?limit=50")) ?? []

@@ -2,7 +2,7 @@
 
 | Area | Stable | Experimental | Planned |
 |---|---|---|---|
-| Local backend | FastAPI API, health checks, auth middleware, rate limits, local RBAC, scheduled-agent status | automatic source sync scheduler | packaged backend runtime |
+| Local backend | FastAPI API, health checks, auth middleware, rate limits, local RBAC, scheduled-agent status, local request metrics | automatic source sync scheduler | packaged backend runtime |
 | Storage | Postgres schema, local data directory, Markdown/JSON vault export | Chroma semantic index, Neo4j graph enrichment | editable vault import and bidirectional sync |
 | macOS app | SwiftUI navigation, chat, knowledge views, onboarding | workflow and intelligence dashboards | automatic backend startup and update flow |
 | Sources | recordings, Slack, Gmail, Fathom, Linear, Calendar, local repos | attachment extraction, document library, bookmarks, OCR text handoff, folder watch config, and project-context scoring | connector SDK runtime and plugin registry |

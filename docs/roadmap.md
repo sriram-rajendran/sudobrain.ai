@@ -60,9 +60,9 @@ decisions, promises, and project risk.
 - Per-task provider routing rules: shipped via `/models/routing-rules` and `/models/route`.
 - OpenAI-compatible, OpenRouter, LM Studio, Anthropic, Gemini, Groq, and Bedrock execution scaffolds: shipped.
 - Usage analytics: expanded local counts and trends shipped via `/usage/analytics`.
-- Admin/debug dashboard: started via `/admin/dashboard` and the macOS Admin view.
-- Local audit/request logs: started via `/admin/audit-log` and `/admin/request-log`.
-- Observability status: started via `/observability/status`.
+- Admin/debug dashboard: shipped via `/admin/dashboard` and the macOS Admin view.
+- Local audit/request logs: shipped via `/admin/audit-log`, `/admin/request-log`, and the Admin view.
+- Observability status and request metrics: shipped via `/observability/status`, `/observability/metrics`, and the Admin view.
 - Local RBAC enforcement: shipped for owner/editor/viewer roles.
 - API rate limits: shipped via `SUDOBRAIN_RATE_LIMIT_PER_MINUTE`.
 - Encrypted local secrets store: shipped via `/security/secrets`.

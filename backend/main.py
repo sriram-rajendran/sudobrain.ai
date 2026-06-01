@@ -46,6 +46,42 @@ TRUST_LOCALHOST = os.getenv("SUDOBRAIN_TRUST_LOCALHOST", "true").strip().lower()
 # Paths that don't require authentication
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/fathom/webhook"}
 
+REQUEST_METRICS = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "total_requests": 0,
+    "by_path": {},
+    "by_status": {},
+    "recent": [],
+}
+
+
+class ObservabilityMiddleware(BaseHTTPMiddleware):
+    """Collect local-only request metrics without external telemetry."""
+
+    async def dispatch(self, request: Request, call_next):
+        started = time.perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+            path = request.url.path
+            REQUEST_METRICS["total_requests"] += 1
+            REQUEST_METRICS["by_path"][path] = REQUEST_METRICS["by_path"].get(path, 0) + 1
+            status_key = str(status_code)
+            REQUEST_METRICS["by_status"][status_key] = REQUEST_METRICS["by_status"].get(status_key, 0) + 1
+            recent = REQUEST_METRICS["recent"]
+            recent.append({
+                "method": request.method,
+                "path": path,
+                "status": status_code,
+                "elapsed_ms": elapsed_ms,
+                "at": datetime.now(timezone.utc).isoformat(),
+            })
+            del recent[:-200]
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Small local quota guard for open-source/default deployments."""
@@ -125,6 +161,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(AuthMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RBACMiddleware)
+app.add_middleware(ObservabilityMiddleware)
 
 
 CONFIG_PATH = Path(DATA_DIR if "DATA_DIR" in globals() else os.getenv("SUDOBRAIN_DATA_DIR", os.path.expanduser("~/.sudobrain"))) / "config.json"
@@ -2256,9 +2293,29 @@ def observability_status():
     """Report local observability capabilities."""
     return {
         "logs": {"enabled": True, "path": str(Path(LOG_DIR) / "sudobrain.log")},
-        "metrics": {"usage_analytics": "/usage/analytics"},
+        "metrics": {"usage_analytics": "/usage/analytics", "request_metrics": "/observability/metrics"},
         "traces": {"workflow_trace": "/workflows/trace"},
         "opentelemetry": {"enabled": _truthy_env("SUDOBRAIN_OTEL_ENABLED", False), "env": "SUDOBRAIN_OTEL_ENABLED"},
+    }
+
+
+@app.get("/observability/metrics")
+def observability_metrics(limit: int = Query(default=50, ge=1, le=200)):
+    """Return local in-process request metrics and recent request timings."""
+    top_paths = sorted(
+        REQUEST_METRICS["by_path"].items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:25]
+    recent = REQUEST_METRICS["recent"][-limit:]
+    return {
+        "local_only": True,
+        "started_at": REQUEST_METRICS["started_at"],
+        "total_requests": REQUEST_METRICS["total_requests"],
+        "by_status": REQUEST_METRICS["by_status"],
+        "top_paths": [{"path": path, "count": count} for path, count in top_paths],
+        "recent": recent,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
