@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
+from backend.connectors.asana import AsanaConnector, preview_documents as preview_asana_documents
 from backend.connectors.catalog import list_source_connectors
 from backend.connectors.confluence import ConfluenceConnector, preview_documents as preview_confluence_documents
 from backend.connectors.google_drive import GoogleDriveConnector, preview_documents as preview_drive_documents
@@ -21,7 +22,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence", "jira", "asana"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -116,6 +117,20 @@ def jira_preview(
     documents = []
     if health.get("ok"):
         documents = preview_jira_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def asana_preview(
+    token: str | None = None,
+    workspace_gid: str | None = None,
+    project_gid: str | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = AsanaConnector(token=token, workspace_gid=workspace_gid, project_gid=project_gid)
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_asana_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

@@ -62,6 +62,10 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/confluence/preview \
 curl -X POST http://127.0.0.1:8420/extensions/connectors/jira/preview \
   -H 'Content-Type: application/json' \
   -d '{"base_url":"https://example.atlassian.net","limit":5}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/asana/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"workspace_gid":"workspace-id","limit":5}'
 ```
 
 Sample modules and actions can also be previewed without writes:

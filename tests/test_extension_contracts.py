@@ -2,6 +2,7 @@ import unittest
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
+from backend.connectors.asana import AsanaConnector
 from backend.connectors.catalog import connector_keys, list_source_connectors
 from backend.connectors.confluence import ConfluenceConnector
 from backend.connectors.google_drive import GoogleDriveConnector
@@ -73,6 +74,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("google_drive", extensions["runtime"]["connectors"])
         self.assertIn("confluence", extensions["runtime"]["connectors"])
         self.assertIn("jira", extensions["runtime"]["connectors"])
+        self.assertIn("asana", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -372,6 +374,47 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("Database migration", docs[0].text)
         self.assertIn("Waiting on deploy window", docs[0].text)
         self.assertEqual(docs[0].metadata["key"], "ENG-7")
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_asana_connector_normalizes_tasks(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/" + "users" + "/me"):
+                    return FakeResponse({"data": {"gid": "user-1"}})
+                if url.endswith("/tasks"):
+                    return FakeResponse({"data": [
+                        {
+                            "gid": "task-1",
+                            "name": "Ship launch checklist",
+                            "notes": "Confirm onboarding and docs.",
+                            "completed": False,
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "modified_at": "2026-01-04T00:00:00Z",
+                            "due_on": "2026-01-07",
+                            "permalink_url": "https://example.invalid/asana/task-1",
+                            "assignee": {"gid": "user-1", "name": "Maya"},
+                            "projects": [{"gid": "project-1", "name": "Launch"}],
+                            "memberships": [{"section": {"name": "Ready"}}],
+                        }
+                    ]})
+                return FakeResponse({})
+
+        connector = AsanaConnector(token="secret", workspace_gid="workspace-1", session=FakeSession())
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Ship launch checklist")
+        self.assertIn("Confirm onboarding", docs[0].text)
+        self.assertEqual(docs[0].metadata["projects"], ["Launch"])
         self.assertNotIn("secret", str(connector.health()))
 
 

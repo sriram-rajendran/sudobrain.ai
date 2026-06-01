@@ -86,6 +86,18 @@ Use `SUDOBRAIN_JIRA_BASE_URL` plus either
 `SUDOBRAIN_JIRA_BEARER_TOKEN`. Optional `SUDOBRAIN_JIRA_JQL` scopes previews to
 the projects, epics, sprints, blockers, or ownership slices you care about.
 
+Preview Asana without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/asana/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"workspace_gid":"workspace-id","limit":10}'
+```
+
+Use `SUDOBRAIN_ASANA_TOKEN` with optional `SUDOBRAIN_ASANA_WORKSPACE_GID` or
+`SUDOBRAIN_ASANA_PROJECT_GID` to scope tasks, projects, assignees, due dates,
+and section context.
+
 ## Source Families
 
 ### Engineering

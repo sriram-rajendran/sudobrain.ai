@@ -2372,6 +2372,13 @@ class JiraPreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class AsanaPreviewRequest(BaseModel):
+    token: Optional[str] = Field(None, max_length=500)
+    workspace_gid: Optional[str] = Field(None, max_length=120)
+    project_gid: Optional[str] = Field(None, max_length=120)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2508,6 +2515,18 @@ def extension_jira_preview(request: JiraPreviewRequest):
         token=request.token,
         bearer_token=request.bearer_token,
         jql=request.jql,
+        limit=request.limit,
+    )
+
+
+@app.post("/extensions/connectors/asana/preview")
+def extension_asana_preview(request: AsanaPreviewRequest):
+    """Preview the read-only Asana connector without ingesting data."""
+    from backend.extensions.runtime import asana_preview
+    return asana_preview(
+        token=request.token,
+        workspace_gid=request.workspace_gid,
+        project_gid=request.project_gid,
         limit=request.limit,
     )
 

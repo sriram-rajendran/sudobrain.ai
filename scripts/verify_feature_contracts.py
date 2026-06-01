@@ -72,6 +72,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/google-drive/preview")',
         '@app.post("/extensions/connectors/confluence/preview")',
         '@app.post("/extensions/connectors/jira/preview")',
+        '@app.post("/extensions/connectors/asana/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -187,6 +188,13 @@ def main() -> None:
         "SUDOBRAIN_JIRA_BASE_URL",
         "/rest/api/3/search",
         "_adf_to_text",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/asana.py", [
+        "class AsanaConnector",
+        "SUDOBRAIN_ASANA_TOKEN",
+        "/tasks",
+        "assignee",
         "preview_documents",
     ])
     print("Feature contract checks passed.")
