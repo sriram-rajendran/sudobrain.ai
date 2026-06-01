@@ -3,6 +3,7 @@ import unittest
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.ai.providers import configured_providers
 from backend.connectors.catalog import connector_keys, list_source_connectors
+from backend.connectors.confluence import ConfluenceConnector
 from backend.connectors.google_drive import GoogleDriveConnector
 from backend.connectors.github import GitHubConnector
 from backend.connectors.local_markdown import LocalMarkdownConnector
@@ -69,6 +70,7 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertIn("github", extensions["runtime"]["connectors"])
         self.assertIn("notion", extensions["runtime"]["connectors"])
         self.assertIn("google_drive", extensions["runtime"]["connectors"])
+        self.assertIn("confluence", extensions["runtime"]["connectors"])
 
     def test_github_connector_normalizes_repository_activity(self):
         class FakeResponse:
@@ -261,6 +263,52 @@ class ExtensionContractTests(unittest.TestCase):
         self.assertEqual(docs[0].title, "Launch spec")
         self.assertIn("Decision log", docs[0].text)
         self.assertEqual(docs[0].metadata["kind"], "doc")
+        self.assertNotIn("secret", str(connector.health()))
+
+    def test_confluence_connector_normalizes_pages(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeSession:
+            def get(self, url, headers=None, params=None, timeout=30):
+                if url.endswith("/api/v2/spaces"):
+                    return FakeResponse({"results": [{"id": "space-1"}]})
+                if url.endswith("/api/v2/pages"):
+                    return FakeResponse({
+                        "results": [
+                            {
+                                "id": "page-1",
+                                "title": "Runbook",
+                                "spaceId": "space-1",
+                                "status": "current",
+                                "authorId": "author-1",
+                                "createdAt": "2026-01-01T00:00:00Z",
+                                "version": {"number": 3, "createdAt": "2026-01-03T00:00:00Z", "authorId": "author-2"},
+                                "body": {"storage": {"value": "<p>Restart service after deploy.</p>"}},
+                                "_links": {"webui": "/wiki/spaces/ENG/pages/page-1"},
+                            }
+                        ]
+                    })
+                return FakeResponse({})
+
+        connector = ConfluenceConnector(
+            base_url="https://example.invalid",
+            email="demo@example.invalid",
+            token="secret",
+            session=FakeSession(),
+        )
+        self.assertTrue(connector.health()["ok"])
+        docs = list(connector.fetch(limit=5))
+        self.assertEqual(docs[0].title, "Runbook")
+        self.assertIn("Restart service", docs[0].text)
+        self.assertEqual(docs[0].metadata["kind"], "page")
         self.assertNotIn("secret", str(connector.health()))
 
 

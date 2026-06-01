@@ -60,6 +60,19 @@ Use `SUDOBRAIN_GOOGLE_DRIVE_TOKEN` or the request `token` field. Google Docs,
 Sheets, and Slides are exported as text-friendly previews; binary files are
 listed as metadata-only source documents.
 
+Preview Confluence without ingesting data:
+
+```bash
+curl -X POST http://127.0.0.1:8420/extensions/connectors/confluence/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"base_url":"https://example.atlassian.net","limit":10}'
+```
+
+Use `SUDOBRAIN_CONFLUENCE_BASE_URL` plus either
+`SUDOBRAIN_CONFLUENCE_EMAIL`/`SUDOBRAIN_CONFLUENCE_TOKEN` or
+`SUDOBRAIN_CONFLUENCE_BEARER_TOKEN`. Optional `SUDOBRAIN_CONFLUENCE_SPACE_ID`
+limits previews to a single space.
+
 ## Source Families
 
 ### Engineering

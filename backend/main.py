@@ -2354,6 +2354,15 @@ class GoogleDrivePreviewRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class ConfluencePreviewRequest(BaseModel):
+    base_url: Optional[str] = Field(None, max_length=1000)
+    email: Optional[str] = Field(None, max_length=320)
+    token: Optional[str] = Field(None, max_length=500)
+    bearer_token: Optional[str] = Field(None, max_length=1000)
+    space_id: Optional[str] = Field(None, max_length=120)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
 class IntelligencePreviewRequest(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
@@ -2464,6 +2473,20 @@ def extension_google_drive_preview(request: GoogleDrivePreviewRequest):
     """Preview the read-only Google Drive connector without ingesting data."""
     from backend.extensions.runtime import google_drive_preview
     return google_drive_preview(limit=request.limit, token=request.token, query=request.query)
+
+
+@app.post("/extensions/connectors/confluence/preview")
+def extension_confluence_preview(request: ConfluencePreviewRequest):
+    """Preview the read-only Confluence connector without ingesting data."""
+    from backend.extensions.runtime import confluence_preview
+    return confluence_preview(
+        base_url=request.base_url,
+        email=request.email,
+        token=request.token,
+        bearer_token=request.bearer_token,
+        space_id=request.space_id,
+        limit=request.limit,
+    )
 
 
 @app.post("/extensions/intelligence/keyword-risk/preview")

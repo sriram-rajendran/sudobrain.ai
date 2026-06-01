@@ -70,6 +70,7 @@ def main() -> None:
         '@app.post("/extensions/connectors/github/preview")',
         '@app.post("/extensions/connectors/notion/preview")',
         '@app.post("/extensions/connectors/google-drive/preview")',
+        '@app.post("/extensions/connectors/confluence/preview")',
         '@app.get("/mcp/client/status")',
         '@app.get("/mcp/client/tools")',
         '@app.post("/mcp/client/tools/preview")',
@@ -171,6 +172,13 @@ def main() -> None:
         "SUDOBRAIN_GOOGLE_DRIVE_TOKEN",
         "EXPORT_MIME_TYPES",
         "/files",
+        "preview_documents",
+    ])
+    require_text("backend/connectors/confluence.py", [
+        "class ConfluenceConnector",
+        "SUDOBRAIN_CONFLUENCE_BASE_URL",
+        "/api/v2/pages",
+        "_strip_html",
         "preview_documents",
     ])
     print("Feature contract checks passed.")

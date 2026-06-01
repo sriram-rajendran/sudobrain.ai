@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.actions.sample_workflow_action import DraftNotificationAction
 from backend.connectors.catalog import list_source_connectors
+from backend.connectors.confluence import ConfluenceConnector, preview_documents as preview_confluence_documents
 from backend.connectors.google_drive import GoogleDriveConnector, preview_documents as preview_drive_documents
 from backend.connectors.github import GitHubConnector, preview_documents
 from backend.connectors.local_markdown import LocalMarkdownConnector
@@ -19,7 +20,7 @@ def list_extensions() -> dict:
         "builtins": BUILTIN_PLUGINS,
         "external": registry.get("external", []),
         "runtime": {
-            "connectors": ["local_markdown", "github", "notion", "google_drive"],
+            "connectors": ["local_markdown", "github", "notion", "google_drive", "confluence"],
             "source_catalog": list_source_connectors(),
             "intelligence_modules": ["keyword_risk"],
             "workflow_actions": ["draft_notification"],
@@ -70,6 +71,28 @@ def google_drive_preview(limit: int = 25, token: str | None = None, query: str |
     documents = []
     if health.get("ok"):
         documents = preview_drive_documents(connector.fetch(limit=max(1, min(limit, 100))))
+    return {"connector": connector.name, "health": health, "documents": documents}
+
+
+def confluence_preview(
+    base_url: str | None = None,
+    email: str | None = None,
+    token: str | None = None,
+    bearer_token: str | None = None,
+    space_id: str | None = None,
+    limit: int = 25,
+) -> dict:
+    connector = ConfluenceConnector(
+        base_url=base_url,
+        email=email,
+        token=token,
+        bearer_token=bearer_token,
+        space_id=space_id,
+    )
+    health = connector.health()
+    documents = []
+    if health.get("ok"):
+        documents = preview_confluence_documents(connector.fetch(limit=max(1, min(limit, 100))))
     return {"connector": connector.name, "health": health, "documents": documents}
 
 

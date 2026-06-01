@@ -54,6 +54,10 @@ curl -X POST http://127.0.0.1:8420/extensions/connectors/notion/preview \
 curl -X POST http://127.0.0.1:8420/extensions/connectors/google-drive/preview \
   -H 'Content-Type: application/json' \
   -d '{"limit":5,"query":"trashed=false"}'
+
+curl -X POST http://127.0.0.1:8420/extensions/connectors/confluence/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"base_url":"https://example.atlassian.net","limit":5}'
 ```
 
 Sample modules and actions can also be previewed without writes:
