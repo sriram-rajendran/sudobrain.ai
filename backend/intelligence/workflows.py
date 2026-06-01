@@ -57,6 +57,18 @@ def init_workflow_tables():
                 detail_json TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS workflow_outbox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                approval_id INTEGER,
+                rule_id INTEGER,
+                rule_name TEXT,
+                action_type TEXT,
+                payload_json TEXT,
+                status TEXT DEFAULT 'ready',
+                external_publish BOOLEAN DEFAULT FALSE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         conn.commit()
     finally:
@@ -456,16 +468,78 @@ def list_approvals(status: str = "pending", limit: int = 100) -> list[dict]:
 
 
 def decide_approval(approval_id: int, approved: bool) -> bool:
+    import json
     init_workflow_tables()
     conn = get_connection()
     try:
+        row = conn.execute("SELECT * FROM workflow_approvals WHERE id = ? AND status = 'pending'", (approval_id,)).fetchone()
+        if not row:
+            return False
+        approval = dict(row)
         status = "approved" if approved else "rejected"
         result = conn.execute(
             "UPDATE workflow_approvals SET status = ?, decided_at = ? WHERE id = ? AND status = 'pending'",
             (status, datetime.now().isoformat(), approval_id),
         )
+        if approved:
+            payload = json.loads(approval.get("payload_json") or "{}")
+            action_type = approval.get("action_type") or ""
+            action_result = _execute_approved_action(conn, approval, payload)
+            conn.execute(
+                "INSERT INTO workflow_trace (rule_id, rule_name, step, detail_json) VALUES (?, ?, ?, ?)",
+                (
+                    approval.get("rule_id"),
+                    approval.get("rule_name") or "",
+                    "approval_executed",
+                    json.dumps({"approval_id": approval_id, "action": action_type, "result": action_result}, default=str),
+                ),
+            )
         conn.commit()
         return result.rowcount > 0
+    finally:
+        conn.close()
+
+
+def _execute_approved_action(conn, approval: dict, payload: dict) -> str:
+    """Execute approved local actions or store external writes in a local outbox."""
+    import json
+    action_type = approval.get("action_type") or ""
+    params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+    item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+
+    if action_type in {"send_email", "external_write", "webhook"}:
+        conn.execute(
+            """INSERT INTO workflow_outbox
+            (approval_id, rule_id, rule_name, action_type, payload_json, external_publish)
+            VALUES (?, ?, ?, ?, ?, FALSE)""",
+            (
+                approval.get("id"),
+                approval.get("rule_id"),
+                approval.get("rule_name"),
+                action_type,
+                json.dumps({"params": params, "item": item}, default=str),
+            ),
+        )
+        return "stored_in_local_outbox"
+
+    return _execute_action(action_type, params, item)
+
+
+def list_outbox(status: str | None = None, limit: int = 100) -> list[dict]:
+    init_workflow_tables()
+    conn = get_connection()
+    try:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM workflow_outbox WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM workflow_outbox ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
     finally:
         conn.close()
 

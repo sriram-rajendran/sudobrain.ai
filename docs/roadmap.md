@@ -49,7 +49,7 @@ decisions, promises, and project risk.
 - Scheduled agent runner: shipped via `/scheduler/status`, `/heartbeat/trigger`, `/intelligence/run-now`, and the Admin scheduled agents panel.
 - Agent run history and replay: shipped via `/workflows/log`, `/workflows/log/{log_id}/replay`, and the macOS workflow view.
 - Tool-call trace viewer: workflow trace backend and UI started.
-- Approval steps before external writes: approval queue scaffold started.
+- Approval steps before external writes: shipped with approval queue, approve/reject controls, trace entries, and local outbox artifacts.
 - Visual/no-code workflow builder: started via `/workflows/graph` and `web-companion/workflow-builder.html`.
 - Report sharing/export: local Markdown/JSON export and share artifacts shipped.
 

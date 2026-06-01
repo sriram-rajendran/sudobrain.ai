@@ -3172,6 +3172,13 @@ def workflow_approvals(status: str = "pending", limit: int = 100):
     return list_approvals(status=status, limit=min(limit, 500))
 
 
+@app.get("/workflows/outbox")
+def workflow_outbox(status: Optional[str] = None, limit: int = 100):
+    """List approved workflow write artifacts kept in the local outbox."""
+    from backend.intelligence.workflows import list_outbox
+    return list_outbox(status=status, limit=min(limit, 500))
+
+
 @app.post("/workflows/approvals/{approval_id}/approve")
 def approve_workflow_action(approval_id: int):
     from backend.intelligence.workflows import decide_approval

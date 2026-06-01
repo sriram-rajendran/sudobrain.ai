@@ -538,6 +538,7 @@ struct WorkflowsView: View {
     @State private var log: [[String: Any]] = []
     @State private var templates: [[String: Any]] = []
     @State private var approvals: [[String: Any]] = []
+    @State private var outbox: [[String: Any]] = []
     @State private var trace: [[String: Any]] = []
     @State private var graph: [String: Any] = [:]
     @State private var name = ""
@@ -637,6 +638,11 @@ struct WorkflowsView: View {
                         }
                     }
                 }
+                Section("Local Outbox") {
+                    ForEach(outbox.indices, id: \.self) { i in
+                        KeyValueCard(title: outbox[i]["action_type"] as? String ?? "Outbox", values: outbox[i])
+                    }
+                }
                 Section("Log") {
                     ForEach(log.indices, id: \.self) { i in
                         HStack {
@@ -668,6 +674,7 @@ struct WorkflowsView: View {
         log = (try? await APIClient.shared.getRaw("/workflows/log?limit=50")) ?? []
         templates = (try? await APIClient.shared.getRaw("/workflows/templates")) ?? []
         approvals = (try? await APIClient.shared.getRaw("/workflows/approvals")) ?? []
+        outbox = (try? await APIClient.shared.getRaw("/workflows/outbox?limit=50")) ?? []
         trace = (try? await APIClient.shared.getRaw("/workflows/trace?limit=50")) ?? []
         graph = (try? await APIClient.shared.getRawObject("/workflows/graph")) ?? [:]
     }
