@@ -117,7 +117,31 @@ class ProviderClient:
         }
 
     def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
-        return ProviderResult(self.provider, "unsupported", error="Provider execution is not implemented for this provider.")
+        return ProviderResult(self.provider, "unsupported", error="Provider execution is unavailable for this provider.")
+
+
+class OllamaClient(ProviderClient):
+    def complete(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> ProviderResult:
+        base_url = os.getenv("OLLAMA_BASE_URL", self.config.get("default_base_url") or "http://localhost:11434").rstrip("/")
+        model = os.getenv("OLLAMA_MODEL", self.config.get("model") or os.getenv("SUDOBRAIN_LLM_MODEL", ""))
+        if not model:
+            return ProviderResult(self.provider, "not_configured", error="OLLAMA_MODEL or SUDOBRAIN_LLM_MODEL is required.")
+        try:
+            response = requests.post(
+                f"{base_url}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": temperature, "num_predict": max_tokens},
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            return ProviderResult(self.provider, "ok", text=payload.get("response", ""), metadata={"model": model})
+        except Exception as exc:
+            return ProviderResult(self.provider, "error", error=str(exc), metadata={"model": model})
 
 
 class OpenAICompatibleClient(ProviderClient):
@@ -330,6 +354,8 @@ def get_provider_client(provider: str | None = None) -> ProviderClient:
     config = configured_providers()
     selected = provider or config["active_provider"]
     provider_config = config["providers"].get(selected, {})
+    if selected == "ollama":
+        return OllamaClient(selected, provider_config)
     if selected in {"openai_compatible", "openrouter", "lm_studio"}:
         return OpenAICompatibleClient(selected, provider_config)
     if selected == "anthropic":

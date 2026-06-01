@@ -9,6 +9,9 @@ configured only when the user explicitly wants them.
 - `OLLAMA_BASE_URL=http://localhost:11434`
 - `OLLAMA_MODEL=gemma4:e4b`
 
+The provider client can call Ollama through `/api/generate` when a model is
+configured. Chat still falls back to local search when the provider is offline.
+
 LM Studio can also be used as a local OpenAI-compatible runtime:
 
 ```bash

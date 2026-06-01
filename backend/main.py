@@ -2812,7 +2812,7 @@ async def summarize_webpage_capture(request: Request):
 
 
 @app.post("/ocr/extract")
-async def ocr_extract_placeholder(request: Request):
+async def ocr_extract_capture(request: Request):
     """Register OCR/image ingestion text from a local client or OCR worker."""
     payload = await request.json()
     text = payload.get("text", "")

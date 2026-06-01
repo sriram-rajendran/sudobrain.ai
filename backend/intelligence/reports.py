@@ -167,7 +167,7 @@ Keep it under 200 words. Be direct and specific."""
     try:
         narrative = ask(prompt, max_wait=60)
     except Exception:
-        narrative = "Report generation requires local reasoning engine."
+        narrative = "Report narrative unavailable because the local reasoning engine is not configured."
 
     stats["narrative"] = narrative
     stats["generated_at"] = datetime.now().isoformat()
